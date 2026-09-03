@@ -78,9 +78,9 @@ def _(mo):
 
 @app.cell
 def _():
-    from piv_pipeline import process_pair, quiver_on_image
+    from piv_pipeline import process_pair, quiver_on_image, PX_PER_MM
 
-    return process_pair, quiver_on_image
+    return PX_PER_MM, process_pair, quiver_on_image
 
 
 @app.cell
@@ -107,16 +107,15 @@ def _(result, xr):
 
 
 @app.cell
-def _(ROOT, a1, plt, result_ds):
+def _(PX_PER_MM, ROOT, a1, mo, plt, result_ds):
     # Overlay the PIVPy quiver+streamlines plot on the raw frame-A image.
-    scaling_factor = 100  # px/mm, same as process_pair()
-    extent = (0, a1.shape[1] / scaling_factor, 0, a1.shape[0] / scaling_factor)
+    extent = (0, a1.shape[1] / PX_PER_MM, 0, a1.shape[0] / PX_PER_MM)
 
     _fig, _ax = plt.subplots(figsize=(9, 9))
     _ax.imshow(a1, cmap="gray", extent=extent, origin="upper", alpha=0.85)
     result_ds.piv.plot(ax=_ax, background=None, title="B0001 — PIV overlay on frame A")
     _fig.savefig(ROOT / "outputs" / "pair1_pivpy_overlay.png", dpi=150)
-    return
+    mo.mpl.interactive(_fig)
 
 
 @app.cell(hide_code=True)
@@ -138,7 +137,7 @@ def _(mo):
 
 
 @app.cell
-def _(ROOT, a1, np, plt, quiver_on_image, result_ds):
+def _(ROOT, a1, mo, np, plt, quiver_on_image, result_ds):
     _fig, _ax = plt.subplots(figsize=(9, 9))
     _u, _v = result_ds["u"].values, result_ds["v"].values
     _x, _y = np.meshgrid(result_ds["x"].values, result_ds["y"].values)
@@ -150,7 +149,7 @@ def _(ROOT, a1, np, plt, quiver_on_image, result_ds):
     _ax.set_ylabel("y [mm]")
     _ax.set_title("B0001 — vectors colored by streamwise velocity")
     _fig.savefig(ROOT / "outputs" / "pair1_colored_quiver.png", dpi=150)
-    return
+    mo.mpl.interactive(_fig)
 
 
 @app.cell(hide_code=True)
@@ -165,14 +164,14 @@ def _(mo):
 
 
 @app.cell
-def _(ROOT, a1, result_ds):
+def _(ROOT, a1, mo, result_ds):
     _fig, _ax = result_ds.piv.plot(
         background="image", image=a1, color_by="v",
         streamlines=False, quiver_key=False,
         title="B0001 — ds.piv.plot(background='image', color_by='v')",
     )
     _fig.savefig(ROOT / "outputs" / "pair1_pivpy_shortcut.png", dpi=150)
-    return
+    mo.mpl.interactive(_fig)
 
 
 if __name__ == "__main__":

@@ -7,6 +7,12 @@ import numpy as np
 from openpiv import tools, scaling as opiv_scaling, validation, filters
 import openpiv.pyprocess as pyprocess
 
+# Real DaVis calibration for this camera/lens, from
+# D:\channel_flow_research\baseline_channel\Properties\Calibration\Calibration.xml
+# (PixelPerMmFactor). The 100 px/mm used in the first-attempt scripts was a
+# placeholder guess and gave a 10 mm channel gap as ~17-20 mm.
+PX_PER_MM = 173.419
+
 
 def process_pair(
     tif_path,
@@ -20,7 +26,7 @@ def process_pair(
     s2n_threshold=1.3,
     median_threshold=3,
     median_size=1,
-    scaling_factor=100,
+    scaling_factor=PX_PER_MM,
 ):
     """Run single-pass PIV on one dual-frame TIFF (frame A stacked on frame B).
 
@@ -69,7 +75,7 @@ def process_pair(
 
 
 def quiver_on_image(ax, image, x, y, u, v, *, color_by=None, cmap="viridis",
-                     extent=None, scaling_factor=100, image_alpha=0.6, arrow_width=0.004):
+                     extent=None, scaling_factor=PX_PER_MM, image_alpha=0.6, arrow_width=0.004):
     """PIVlab-style plot: raw image with a quiver colored by a continuous field.
 
     color_by: 2D array same shape as u/v to color the arrows by (e.g. v for
