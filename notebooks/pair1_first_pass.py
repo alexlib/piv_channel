@@ -107,15 +107,26 @@ def _(result, xr):
 
 
 @app.cell
-def _(PX_PER_MM, ROOT, a1, mo, plt, result_ds):
-    # Overlay the PIVPy quiver+streamlines plot on the raw frame-A image.
-    extent = (0, a1.shape[1] / PX_PER_MM, 0, a1.shape[0] / PX_PER_MM)
+def _(PX_PER_MM, a1):
+    # The image's true physical extent (from its pixel size and the real
+    # calibration) - NOT the same as the vector grid's own x/y range, which
+    # is smaller (PIV leaves a margin the width of half an interrogation
+    # window with no vectors near each edge). Always pass this explicitly
+    # to ds.piv.plot(background="image", ...); its image_extent default is
+    # the vector grid's bounding box, which crops/distorts the image.
+    image_extent = (0, a1.shape[1] / PX_PER_MM, 0, a1.shape[0] / PX_PER_MM)
+    return (image_extent,)
 
+
+@app.cell
+def _(ROOT, a1, image_extent, mo, plt, result_ds):
+    # Overlay the PIVPy quiver+streamlines plot on the raw frame-A image.
     _fig, _ax = plt.subplots(figsize=(9, 9))
-    _ax.imshow(a1, cmap="gray", extent=extent, origin="upper", alpha=0.85)
+    _ax.imshow(a1, cmap="gray", extent=image_extent, origin="upper", alpha=0.85)
     result_ds.piv.plot(ax=_ax, background=None, title="B0001 — PIV overlay on frame A")
     _fig.savefig(ROOT / "outputs" / "pair1_pivpy_overlay.png", dpi=150)
     mo.mpl.interactive(_fig)
+    return
 
 
 @app.cell(hide_code=True)
@@ -126,11 +137,20 @@ def _(mo):
         "contour (vorticity, magnitude, ...), never a raw image, and its "
         "`.piv.quiver(colorbar=True)` only colors arrows by speed magnitude — "
         "not by an arbitrary component like streamwise velocity. `quiver_on_image()` "
-        "in `piv_pipeline.py` fills that gap (PIVlab-style: raw image + arrows "
-        "colored continuously by any field, auto-scaled like PIVPy's own plot()). "
-        "It's also the prototype for a `background=\"image\"` / `color_by=` shortcut "
-        "now added upstream in pivpy itself (this project's `pivpy` dependency "
-        "points at the local `../pivpy` clone) — see the last cell below."
+        "in `piv_pipeline.py` fills that gap: our own minimal, purpose-built "
+        "function for exactly this overlay (PIVlab-style, arrows colored "
+        "continuously by any field, auto-scaled). It's also the prototype for a "
+        "`background=\"image\"` / `color_by=` addition now made upstream in pivpy "
+        "itself (this project's `pivpy` dependency points at the local `../pivpy` "
+        "clone) — see below.\n\n"
+        "**The two aren't identical.** `ds.piv.plot()` is PIVPy's general-purpose "
+        "entry point (also does streamlines, a quiver key, vorticity/divergence "
+        "backgrounds, etc.), so it carries more machinery and defaults that don't "
+        "always match a hand-tuned call. In particular: `plot(background=\"image\")` "
+        "defaults `image_extent` to the *vector grid's own* x/y range, not the "
+        "image's true physical size - since PIV leaves an unvectored margin near "
+        "each edge, that silently crops/distorts the image unless you pass "
+        "`image_extent=` explicitly (done below, via the `image_extent` cell above)."
     )
     mo.md(_text)
     return
@@ -150,6 +170,7 @@ def _(ROOT, a1, mo, np, plt, quiver_on_image, result_ds):
     _ax.set_title("B0001 — vectors colored by streamwise velocity")
     _fig.savefig(ROOT / "outputs" / "pair1_colored_quiver.png", dpi=150)
     mo.mpl.interactive(_fig)
+    return
 
 
 @app.cell(hide_code=True)
@@ -164,14 +185,15 @@ def _(mo):
 
 
 @app.cell
-def _(ROOT, a1, mo, result_ds):
+def _(ROOT, a1, image_extent, mo, result_ds):
     _fig, _ax = result_ds.piv.plot(
-        background="image", image=a1, color_by="v",
+        background="image", image=a1, image_extent=image_extent, color_by="v",
         streamlines=False, quiver_key=False,
         title="B0001 — ds.piv.plot(background='image', color_by='v')",
     )
     _fig.savefig(ROOT / "outputs" / "pair1_pivpy_shortcut.png", dpi=150)
     mo.mpl.interactive(_fig)
+    return
 
 
 @app.cell(hide_code=True)
@@ -196,25 +218,65 @@ def _(mo):
         options=["RdBu_r", "coolwarm", "seismic", "viridis", "PuOr", "jet"],
         value="viridis", label="arrow colormap",
     )
+    background_cb = mo.ui.checkbox(value=True, label="show background image")
     image_cmap_dd = mo.ui.dropdown(
         options=["gray", "bone", "magma", "viridis"], value="gray", label="image colormap"
     )
     alpha_slider = mo.ui.slider(0.0, 1.0, step=0.05, value=0.6, label="image alpha")
     streamlines_cb = mo.ui.checkbox(value=False, label="streamlines")
-    mo.hstack([color_by_dd, arrow_cmap_dd, image_cmap_dd, alpha_slider, streamlines_cb])
-    return alpha_slider, arrow_cmap_dd, color_by_dd, image_cmap_dd, streamlines_cb
+    row1 = mo.hstack([color_by_dd, arrow_cmap_dd, background_cb, image_cmap_dd, alpha_slider, streamlines_cb])
+
+    arrow_scale_auto_cb = mo.ui.checkbox(value=True, label="auto arrow scale")
+    arrow_scale_slider = mo.ui.slider(0.001, 0.2, step=0.001, value=0.02, label="arrow scale (if not auto)")
+    arrow_width_slider = mo.ui.slider(0.001, 0.02, step=0.0005, value=0.0065, label="arrow width")
+    arrow_alpha_slider = mo.ui.slider(0.0, 1.0, step=0.05, value=0.75, label="arrow alpha")
+    row2 = mo.hstack([arrow_scale_auto_cb, arrow_scale_slider, arrow_width_slider, arrow_alpha_slider])
+
+    mo.vstack([row1, row2])
+    return (
+        alpha_slider,
+        arrow_alpha_slider,
+        arrow_cmap_dd,
+        arrow_scale_auto_cb,
+        arrow_scale_slider,
+        arrow_width_slider,
+        background_cb,
+        color_by_dd,
+        image_cmap_dd,
+        streamlines_cb,
+    )
 
 
 @app.cell
-def _(a1, alpha_slider, arrow_cmap_dd, color_by_dd, image_cmap_dd, mo, plt, result_ds, streamlines_cb):
+def _(
+    a1,
+    alpha_slider,
+    arrow_alpha_slider,
+    arrow_cmap_dd,
+    arrow_scale_auto_cb,
+    arrow_scale_slider,
+    arrow_width_slider,
+    background_cb,
+    color_by_dd,
+    image_cmap_dd,
+    image_extent,
+    mo,
+    result_ds,
+    streamlines_cb,
+):
     _fig, _ax = result_ds.piv.plot(
-        background="image", image=a1,
+        background="image" if background_cb.value else None,
+        image=a1 if background_cb.value else None,
+        image_extent=image_extent,
         image_cmap=image_cmap_dd.value, image_alpha=alpha_slider.value,
         color_by=color_by_dd.value, cmap=arrow_cmap_dd.value,
+        arrow_scale=None if arrow_scale_auto_cb.value else arrow_scale_slider.value,
+        arrow_width=arrow_width_slider.value, arrow_alpha=arrow_alpha_slider.value,
         streamlines=streamlines_cb.value, quiver_key=False,
         title=f"B0001 — color_by={color_by_dd.value!r}, cmap={arrow_cmap_dd.value!r}",
     )
     mo.mpl.interactive(_fig)
+    return
 
 
 if __name__ == "__main__":
