@@ -12,3 +12,8 @@ wheels/
 # Large local sample data / generated outputs (real data lives on D:\channel_flow_research)
 /sample_data/
 /outputs/
+*.im7
+*.vc7
+
+# marimo VS Code extension session cache
+__marimo__/
