@@ -75,11 +75,14 @@ def process_pair(
 
 
 def quiver_on_image(ax, image, x, y, u, v, *, color_by=None, cmap="viridis",
-                     extent=None, scaling_factor=PX_PER_MM, image_alpha=0.6, arrow_width=0.004):
+                     extent=None, scaling_factor=PX_PER_MM, image_alpha=0.6,
+                     image_cmap="gray", arrow_width=0.004):
     """PIVlab-style plot: raw image with a quiver colored by a continuous field.
 
     color_by: 2D array same shape as u/v to color the arrows by (e.g. v for
     streamwise velocity, or np.hypot(u, v) for speed). None -> single color.
+    cmap: colormap for the arrows when color_by is set.
+    image_cmap: colormap for the background image (default "gray").
     Arrow spacing/length are auto-scaled the same way pivpy.graphics.plot()
     does, so the field stays readable instead of a solid wall of arrows.
     extent: (left, right, bottom, top) in the same physical units as x/y;
@@ -87,7 +90,7 @@ def quiver_on_image(ax, image, x, y, u, v, *, color_by=None, cmap="viridis",
     """
     if extent is None:
         extent = (0, image.shape[1] / scaling_factor, 0, image.shape[0] / scaling_factor)
-    ax.imshow(image, cmap="gray", extent=extent, origin="upper", alpha=image_alpha)
+    ax.imshow(image, cmap=image_cmap, extent=extent, origin="upper", alpha=image_alpha)
 
     ny, nx = u.shape
     step = max(1, round(max(nx, ny) / 16))

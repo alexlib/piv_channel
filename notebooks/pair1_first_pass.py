@@ -174,5 +174,48 @@ def _(ROOT, a1, mo, result_ds):
     mo.mpl.interactive(_fig)
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    _text = (
+        "## Interactive exploration\n"
+        "Tune the plot live before deciding what to run in `batch_process.py`. "
+        "This notebook is a scratchpad for picking parameters, not a place to "
+        "commit to them — the batch pipeline still uses fixed, documented "
+        "defaults from `piv_pipeline.py`."
+    )
+    mo.md(_text)
+    return
+
+
+@app.cell
+def _(mo):
+    color_by_dd = mo.ui.dropdown(
+        options=["v", "u", "mag"], value="v", label="color arrows by"
+    )
+    arrow_cmap_dd = mo.ui.dropdown(
+        options=["viridis", "plasma", "coolwarm", "RdBu_r", "turbo"],
+        value="viridis", label="arrow colormap",
+    )
+    image_cmap_dd = mo.ui.dropdown(
+        options=["gray", "bone", "magma", "viridis"], value="gray", label="image colormap"
+    )
+    alpha_slider = mo.ui.slider(0.0, 1.0, step=0.05, value=0.6, label="image alpha")
+    streamlines_cb = mo.ui.checkbox(value=False, label="streamlines")
+    mo.hstack([color_by_dd, arrow_cmap_dd, image_cmap_dd, alpha_slider, streamlines_cb])
+    return alpha_slider, arrow_cmap_dd, color_by_dd, image_cmap_dd, streamlines_cb
+
+
+@app.cell
+def _(a1, alpha_slider, arrow_cmap_dd, color_by_dd, image_cmap_dd, mo, plt, result_ds, streamlines_cb):
+    _fig, _ax = result_ds.piv.plot(
+        background="image", image=a1,
+        image_cmap=image_cmap_dd.value, image_alpha=alpha_slider.value,
+        color_by=color_by_dd.value, cmap=arrow_cmap_dd.value,
+        streamlines=streamlines_cb.value, quiver_key=False,
+        title=f"B0001 — color_by={color_by_dd.value!r}, cmap={arrow_cmap_dd.value!r}",
+    )
+    mo.mpl.interactive(_fig)
+
+
 if __name__ == "__main__":
     app.run()
