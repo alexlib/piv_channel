@@ -18,6 +18,7 @@ def _():
     # Repo root, independent of the runner's cwd (VS Code's marimo extension
     # uses the notebook's own folder; `uv run python notebooks/x.py` uses repo root).
     ROOT = Path(__file__).resolve().parent.parent
+    print(ROOT)
     return ROOT, iio, mo, np, plt, xr
 
 
@@ -119,13 +120,14 @@ def _(PX_PER_MM, a1):
 
 
 @app.cell
-def _(ROOT, a1, image_extent, mo, plt, result_ds):
+def _(plt, result_ds):
     # Overlay the PIVPy quiver+streamlines plot on the raw frame-A image.
-    _fig, _ax = plt.subplots(figsize=(9, 9))
-    _ax.imshow(a1, cmap="gray", extent=image_extent, origin="upper", alpha=0.85)
-    result_ds.piv.plot(ax=_ax, background=None, title="B0001 — PIV overlay on frame A")
-    _fig.savefig(ROOT / "outputs" / "pair1_pivpy_overlay.png", dpi=150)
-    mo.mpl.interactive(_fig)
+    _fig, _ax = plt.subplots(figsize=(6, 6))
+    # _ax.imshow(a1, cmap="gray", extent=image_extent, origin="upper", alpha=0.85)
+    result_ds.piv.plot(ax=_ax, background='magnitude', title="B0001 — PIV overlay on frame A")
+    # _fig.savefig(ROOT / "outputs" / "pair1_pivpy_overlay.png", dpi=150)
+    # mo.mpl.interactive(_fig)
+    _fig.gca()
     return
 
 
@@ -185,14 +187,15 @@ def _(mo):
 
 
 @app.cell
-def _(ROOT, a1, image_extent, mo, result_ds):
+def _(ROOT, a1, image_extent, result_ds):
     _fig, _ax = result_ds.piv.plot(
         background="image", image=a1, image_extent=image_extent, color_by="v",
         streamlines=False, quiver_key=False,
         title="B0001 — ds.piv.plot(background='image', color_by='v')",
     )
     _fig.savefig(ROOT / "outputs" / "pair1_pivpy_shortcut.png", dpi=150)
-    mo.mpl.interactive(_fig)
+    # mo.mpl.interactive(_fig)
+    _fig.gca()
     return
 
 
@@ -209,7 +212,7 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     color_by_dd = mo.ui.dropdown(
         options=["v", "u", "mag"], value="v", label="color arrows by"
@@ -232,7 +235,11 @@ def _(mo):
     arrow_alpha_slider = mo.ui.slider(0.0, 1.0, step=0.05, value=0.75, label="arrow alpha")
     row2 = mo.hstack([arrow_scale_auto_cb, arrow_scale_slider, arrow_width_slider, arrow_alpha_slider])
 
-    mo.vstack([row1, row2])
+    skip_rows_slider = mo.ui.slider(1, 10, step=1, value=1, label="skip rows")
+    skip_cols_slider = mo.ui.slider(1, 10, step=1, value=1, label="skip cols")
+    row3 = mo.hstack([skip_rows_slider, skip_cols_slider])
+
+    mo.vstack([row1, row2, row3])
     return (
         alpha_slider,
         arrow_alpha_slider,
@@ -243,11 +250,13 @@ def _(mo):
         background_cb,
         color_by_dd,
         image_cmap_dd,
+        skip_cols_slider,
+        skip_rows_slider,
         streamlines_cb,
     )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     a1,
     alpha_slider,
@@ -260,8 +269,9 @@ def _(
     color_by_dd,
     image_cmap_dd,
     image_extent,
-    mo,
     result_ds,
+    skip_cols_slider,
+    skip_rows_slider,
     streamlines_cb,
 ):
     _fig, _ax = result_ds.piv.plot(
@@ -272,10 +282,12 @@ def _(
         color_by=color_by_dd.value, cmap=arrow_cmap_dd.value,
         arrow_scale=None if arrow_scale_auto_cb.value else arrow_scale_slider.value,
         arrow_width=arrow_width_slider.value, arrow_alpha=arrow_alpha_slider.value,
+        skip=(skip_rows_slider.value, skip_cols_slider.value),
         streamlines=streamlines_cb.value, quiver_key=False,
-        title=f"B0001 — color_by={color_by_dd.value!r}, cmap={arrow_cmap_dd.value!r}",
+        title=f"B0001 - color_by={color_by_dd.value!r}, cmap={arrow_cmap_dd.value!r}",
     )
-    mo.mpl.interactive(_fig)
+    # mo.mpl.interactive(_fig)
+    _fig.gca()
     return
 
 
