@@ -12,11 +12,13 @@ def _():
     from pathlib import Path
     import matplotlib.pyplot as plt
     import numpy as np
+    import xarray as xr
+    import pivpy  # noqa: F401  (registers the .piv xarray accessor)
 
     # Repo root, independent of the runner's cwd (VS Code's marimo extension
     # uses the notebook's own folder; `uv run python notebooks/x.py` uses repo root).
     ROOT = Path(__file__).resolve().parent.parent
-    return ROOT, iio, mo, np, plt
+    return ROOT, iio, mo, np, plt, xr
 
 
 @app.cell
@@ -90,11 +92,30 @@ def _(ROOT, process_pair):
 
 
 @app.cell
-def _(plt, result):
-    _fig, _ax = plt.subplots(figsize=(8, 8))
-    _ax.quiver(result["x"], result["y"], result["u"], result["v"])
-    _ax.set_aspect("equal")
-    _ax.set_title("process_pair(B0001.tif) — same result as the manual pipeline above")
+def _(result, xr):
+    # PIVPy-shaped Dataset (dims y, x; vars u, v, chc) for this single frame,
+    # same convention batch_process.py uses for the full folder.
+    result_ds = xr.Dataset(
+        data_vars={
+            "u": (("y", "x"), result["u"]),
+            "v": (("y", "x"), result["v"]),
+            "chc": (("y", "x"), (~result["invalid"]).astype(float)),
+        },
+        coords={"x": result["x"][0, :], "y": result["y"][:, 0]},
+    )
+    return (result_ds,)
+
+
+@app.cell
+def _(ROOT, a1, plt, result_ds):
+    # Overlay the PIVPy quiver+streamlines plot on the raw frame-A image.
+    scaling_factor = 100  # px/mm, same as process_pair()
+    extent = (0, a1.shape[1] / scaling_factor, 0, a1.shape[0] / scaling_factor)
+
+    _fig, _ax = plt.subplots(figsize=(9, 9))
+    _ax.imshow(a1, cmap="gray", extent=extent, origin="upper", alpha=0.85)
+    result_ds.piv.plot(ax=_ax, background=None, title="B0001 — PIV overlay on frame A")
+    _fig.savefig(ROOT / "outputs" / "pair1_pivpy_overlay.png", dpi=150)
     return
 
 
