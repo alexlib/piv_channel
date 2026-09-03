@@ -1,0 +1,10 @@
+{
+  "window_size": 64,
+  "overlap": 32,
+  "search_area_size": 64,
+  "dt": 1.0,
+  "validation_method": "sig2noise",
+  "s2n_thresh": 1.1,
+  "scale_plot": 80,
+  "arrow_skip": 2
+}

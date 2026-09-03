@@ -1,0 +1,14 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Large local sample data / generated outputs (real data lives on D:\channel_flow_research)
+/sample_data/
+/outputs/

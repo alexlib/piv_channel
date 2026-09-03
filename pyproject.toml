@@ -1,0 +1,12 @@
+[project]
+name = "piv-channel"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "imagecodecs>=2026.8.16",
+    "marimo>=0.24.0",
+    "pivpy>=0.2.0",
+    "scikit-image>=0.26.0",
+]
