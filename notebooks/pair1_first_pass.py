@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.23.14"
+__generated_with = "0.24.0"
 app = marimo.App(width="medium")
 
 
@@ -116,6 +116,58 @@ def _(ROOT, a1, plt, result_ds):
     _ax.imshow(a1, cmap="gray", extent=extent, origin="upper", alpha=0.85)
     result_ds.piv.plot(ax=_ax, background=None, title="B0001 — PIV overlay on frame A")
     _fig.savefig(ROOT / "outputs" / "pair1_pivpy_overlay.png", dpi=150)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    _text = (
+        "## Colored quiver on the image\n"
+        "PIVPy's `.piv.plot()` only overlays vectors on a *computed* scalar "
+        "contour (vorticity, magnitude, ...), never a raw image, and its "
+        "`.piv.quiver(colorbar=True)` only colors arrows by speed magnitude — "
+        "not by an arbitrary component like streamwise velocity. So this is "
+        "composed by hand: the raw image via `imshow`, arrows colored "
+        "continuously by `v` (streamwise) via `matplotlib`'s `quiver`, reusing "
+        "PIVPy's own auto-scaling heuristic (from `pivpy.graphics.plot`) so "
+        "arrow spacing/length stay readable instead of a solid wall of ink."
+    )
+    mo.md(_text)
+    return
+
+
+@app.cell
+def _(ROOT, a1, np, plt, result_ds):
+    _x, _y = result_ds["x"].values, result_ds["y"].values
+    _X, _Y = np.meshgrid(_x, _y)
+    _u, _v = result_ds["u"].values, result_ds["v"].values
+
+    # Same auto-scale heuristic as pivpy.graphics.plot(): ~16 arrows across the
+    # longer grid axis, arrow length set from the median speed.
+    _ny, _nx = _u.shape
+    _step = max(1, round(max(_nx, _ny) / 16))
+    _dx = abs(_x[1] - _x[0])
+    _med_speed = np.nanmedian(np.hypot(_u, _v)) or 1.0
+    _auto_scale = _med_speed / (0.85 * _step * _dx)
+
+    _fig, _ax = plt.subplots(figsize=(9, 9))
+    _extent = (0, a1.shape[1] / 100, 0, a1.shape[0] / 100)  # 100 px/mm, same as process_pair()
+    _ax.imshow(a1, cmap="gray", extent=_extent, origin="upper", alpha=0.6)
+
+    _Q = _ax.quiver(
+        _X[::_step, ::_step], _Y[::_step, ::_step],
+        _u[::_step, ::_step], _v[::_step, ::_step],
+        _v[::_step, ::_step],  # color by streamwise (vertical) velocity
+        cmap="viridis", angles="xy", scale_units="xy", scale=_auto_scale,
+        width=0.004, pivot="mid",
+    )
+    _cbar = _fig.colorbar(_Q, ax=_ax, pad=0.03, shrink=0.85)
+    _cbar.set_label("streamwise velocity v [mm/frame]")
+    _ax.set_aspect("equal")
+    _ax.set_xlabel("x [mm]")
+    _ax.set_ylabel("y [mm]")
+    _ax.set_title("B0001 — vectors colored by streamwise velocity")
+    _fig.savefig(ROOT / "outputs" / "pair1_colored_quiver.png", dpi=150)
     return
 
 
