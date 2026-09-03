@@ -193,7 +193,7 @@ def _(mo):
         options=["v", "u", "mag"], value="v", label="color arrows by"
     )
     arrow_cmap_dd = mo.ui.dropdown(
-        options=["viridis", "plasma", "coolwarm", "RdBu_r", "turbo"],
+        options=["RdBu_r", "coolwarm", "seismic", "viridis", "PuOr", "jet"],
         value="viridis", label="arrow colormap",
     )
     image_cmap_dd = mo.ui.dropdown(
