@@ -250,8 +250,6 @@ def _(mo):
         background_cb,
         color_by_dd,
         image_cmap_dd,
-        skip_cols_slider,
-        skip_rows_slider,
         streamlines_cb,
     )
 
@@ -270,8 +268,6 @@ def _(
     image_cmap_dd,
     image_extent,
     result_ds,
-    skip_cols_slider,
-    skip_rows_slider,
     streamlines_cb,
 ):
     _fig, _ax = result_ds.piv.plot(
@@ -282,9 +278,8 @@ def _(
         color_by=color_by_dd.value, cmap=arrow_cmap_dd.value,
         arrow_scale=None if arrow_scale_auto_cb.value else arrow_scale_slider.value,
         arrow_width=arrow_width_slider.value, arrow_alpha=arrow_alpha_slider.value,
-        skip=(skip_rows_slider.value, skip_cols_slider.value),
         streamlines=streamlines_cb.value, quiver_key=False,
-        title=f"B0001 - color_by={color_by_dd.value!r}, cmap={arrow_cmap_dd.value!r}",
+        title=f"B0001 — color_by={color_by_dd.value!r}, cmap={arrow_cmap_dd.value!r}",
     )
     # mo.mpl.interactive(_fig)
     _fig.gca()
