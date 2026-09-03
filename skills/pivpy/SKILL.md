@@ -203,6 +203,43 @@ fig.tight_layout()
 fig.savefig("figure_vortex_wake.pdf", bbox_inches="tight")
 ```
 
+### PIVlab-Style Image Overlay (Colored Quiver on the Raw Frame)
+
+`ds.piv.plot()`'s `background=` normally draws a *computed* scalar contour
+(vorticity/magnitude/etc.), never a raw camera image, and its quiver arrows
+are a flat color unless colored by speed. For the classic PIV-software look
+(dense/auto-scaled arrows, continuous colormap, raw tracer image behind
+them), use `background="image"` with `color_by=`:
+
+```python
+fig, ax = ds.piv.plot(
+    background="image", image=frame_a,       # raw grayscale camera frame (2D array)
+    image_extent=None,                       # None -> uses ds's x/y range
+    image_cmap="gray", image_alpha=0.6,
+    color_by="v",                            # or "u", "mag"/"speed", any var name
+    cmap="viridis",                          # colormap for the arrows (color_by only)
+    streamlines=False, quiver_key=False,
+)
+```
+
+`ds.piv.animate()` supports the same `background="image"`, `color_by`,
+`cmap`, `image_cmap`, `image_extent`, `image_alpha` — the frame is drawn
+once (assumed the same background for every t), and the quiver's color and
+direction update per frame:
+
+```python
+anim = ds.piv.animate(
+    background="image", image=frame_a, color_by="v", cmap="viridis", interval=100,
+)
+anim.save("flow_overlay.gif", writer="pillow", fps=10)
+```
+
+For quick interactive tuning in a marimo notebook before committing to
+values for a batch pipeline, drive these kwargs from `mo.ui` controls
+(`mo.ui.dropdown` for `color_by`/`cmap`/`image_cmap`, `mo.ui.slider` for
+`image_alpha`, `mo.ui.checkbox` for `streamlines`) — each `.value` read in
+a cell that calls `ds.piv.plot(...)` re-renders automatically on change.
+
 ### Fluid Dynamics Quiver Animation (MP4 / GIF)
 
 ```python
