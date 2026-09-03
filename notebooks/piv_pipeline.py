@@ -66,3 +66,36 @@ def process_pair(
     xs, ys, u3, v3 = tools.transform_coordinates(xs, ys, u3, v3)
 
     return {"x": xs, "y": ys, "u": u3, "v": v3, "invalid": invalid, "s2n": s2n}
+
+
+def quiver_on_image(ax, image, x, y, u, v, *, color_by=None, cmap="viridis",
+                     extent=None, scaling_factor=100, image_alpha=0.6, arrow_width=0.004):
+    """PIVlab-style plot: raw image with a quiver colored by a continuous field.
+
+    color_by: 2D array same shape as u/v to color the arrows by (e.g. v for
+    streamwise velocity, or np.hypot(u, v) for speed). None -> single color.
+    Arrow spacing/length are auto-scaled the same way pivpy.graphics.plot()
+    does, so the field stays readable instead of a solid wall of arrows.
+    extent: (left, right, bottom, top) in the same physical units as x/y;
+    if None, derived from the image shape and scaling_factor (px/unit).
+    """
+    if extent is None:
+        extent = (0, image.shape[1] / scaling_factor, 0, image.shape[0] / scaling_factor)
+    ax.imshow(image, cmap="gray", extent=extent, origin="upper", alpha=image_alpha)
+
+    ny, nx = u.shape
+    step = max(1, round(max(nx, ny) / 16))
+    dx = abs(x[0, 1] - x[0, 0]) if x.ndim == 2 else abs(x[1] - x[0])
+    med_speed = np.nanmedian(np.hypot(u, v)) or 1.0
+    auto_scale = med_speed / (0.85 * step * dx)
+
+    color_args = (color_by[::step, ::step],) if color_by is not None else ()
+    quiver = ax.quiver(
+        x[::step, ::step], y[::step, ::step], u[::step, ::step], v[::step, ::step],
+        *color_args,
+        cmap=cmap if color_by is not None else None,
+        angles="xy", scale_units="xy", scale=auto_scale,
+        width=arrow_width, pivot="mid",
+    )
+    ax.set_aspect("equal")
+    return quiver

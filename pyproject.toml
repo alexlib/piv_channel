@@ -10,3 +10,6 @@ dependencies = [
     "pivpy>=0.2.0",
     "scikit-image>=0.26.0",
 ]
+
+[tool.uv.sources]
+pivpy = { path = "../pivpy", editable = true }

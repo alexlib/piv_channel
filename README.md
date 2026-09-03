@@ -50,6 +50,6 @@ Known issue in the current first-pass result: most vectors fail signal-to-noise 
 
 ## Tools
 
-- [PIVPy](https://github.com/alexlib/pivpy) (also cloned locally alongside this project) — used for most data analysis. See `skills/pivpy/SKILL.md`.
+- [PIVPy](https://github.com/alexlib/pivpy) — used for most data analysis. See `skills/pivpy/SKILL.md`. `pyproject.toml` currently points the `pivpy` dependency at a local editable clone in `../pivpy` (not the PyPI release), because this project's PIV-on-image plotting depends on a `plot(background="image", color_by=...)` addition made there that hasn't been released yet. Anyone else working on this repo needs `../pivpy` cloned alongside it; once that feature ships in a pivpy release, switch back to a normal version dependency.
 - [openpiv-python](https://github.com/alexlib/openpiv-python) (also cloned locally alongside this project) — used to analyze some image pairs directly.
 - [marimo](https://marimo.io) notebooks — analysis is done interactively in marimo (reactive, cell-based `.py` notebooks) rather than plain scripts. Use the `marimo-notebook` and `marimo-pair` skills when creating or working in these notebooks.

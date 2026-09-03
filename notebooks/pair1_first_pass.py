@@ -78,9 +78,9 @@ def _(mo):
 
 @app.cell
 def _():
-    from piv_pipeline import process_pair
+    from piv_pipeline import process_pair, quiver_on_image
 
-    return (process_pair,)
+    return process_pair, quiver_on_image
 
 
 @app.cell
@@ -126,48 +126,52 @@ def _(mo):
         "PIVPy's `.piv.plot()` only overlays vectors on a *computed* scalar "
         "contour (vorticity, magnitude, ...), never a raw image, and its "
         "`.piv.quiver(colorbar=True)` only colors arrows by speed magnitude — "
-        "not by an arbitrary component like streamwise velocity. So this is "
-        "composed by hand: the raw image via `imshow`, arrows colored "
-        "continuously by `v` (streamwise) via `matplotlib`'s `quiver`, reusing "
-        "PIVPy's own auto-scaling heuristic (from `pivpy.graphics.plot`) so "
-        "arrow spacing/length stay readable instead of a solid wall of ink."
+        "not by an arbitrary component like streamwise velocity. `quiver_on_image()` "
+        "in `piv_pipeline.py` fills that gap (PIVlab-style: raw image + arrows "
+        "colored continuously by any field, auto-scaled like PIVPy's own plot()). "
+        "It's also the prototype for a `background=\"image\"` / `color_by=` shortcut "
+        "now added upstream in pivpy itself (this project's `pivpy` dependency "
+        "points at the local `../pivpy` clone) — see the last cell below."
     )
     mo.md(_text)
     return
 
 
 @app.cell
-def _(ROOT, a1, np, plt, result_ds):
-    _x, _y = result_ds["x"].values, result_ds["y"].values
-    _X, _Y = np.meshgrid(_x, _y)
-    _u, _v = result_ds["u"].values, result_ds["v"].values
-
-    # Same auto-scale heuristic as pivpy.graphics.plot(): ~16 arrows across the
-    # longer grid axis, arrow length set from the median speed.
-    _ny, _nx = _u.shape
-    _step = max(1, round(max(_nx, _ny) / 16))
-    _dx = abs(_x[1] - _x[0])
-    _med_speed = np.nanmedian(np.hypot(_u, _v)) or 1.0
-    _auto_scale = _med_speed / (0.85 * _step * _dx)
-
+def _(ROOT, a1, np, plt, quiver_on_image, result_ds):
     _fig, _ax = plt.subplots(figsize=(9, 9))
-    _extent = (0, a1.shape[1] / 100, 0, a1.shape[0] / 100)  # 100 px/mm, same as process_pair()
-    _ax.imshow(a1, cmap="gray", extent=_extent, origin="upper", alpha=0.6)
+    _u, _v = result_ds["u"].values, result_ds["v"].values
+    _x, _y = np.meshgrid(result_ds["x"].values, result_ds["y"].values)
 
-    _Q = _ax.quiver(
-        _X[::_step, ::_step], _Y[::_step, ::_step],
-        _u[::_step, ::_step], _v[::_step, ::_step],
-        _v[::_step, ::_step],  # color by streamwise (vertical) velocity
-        cmap="viridis", angles="xy", scale_units="xy", scale=_auto_scale,
-        width=0.004, pivot="mid",
-    )
+    _Q = quiver_on_image(_ax, a1, _x, _y, _u, _v, color_by=_v)
     _cbar = _fig.colorbar(_Q, ax=_ax, pad=0.03, shrink=0.85)
     _cbar.set_label("streamwise velocity v [mm/frame]")
-    _ax.set_aspect("equal")
     _ax.set_xlabel("x [mm]")
     _ax.set_ylabel("y [mm]")
     _ax.set_title("B0001 — vectors colored by streamwise velocity")
     _fig.savefig(ROOT / "outputs" / "pair1_colored_quiver.png", dpi=150)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    _text = (
+        "## Same thing, as a pivpy one-liner\n"
+        "`quiver_on_image()` above is now `ds.piv.plot(background=\"image\", "
+        "image=..., color_by=...)` in pivpy — the simple shortcut."
+    )
+    mo.md(_text)
+    return
+
+
+@app.cell
+def _(ROOT, a1, result_ds):
+    _fig, _ax = result_ds.piv.plot(
+        background="image", image=a1, color_by="v",
+        streamlines=False, quiver_key=False,
+        title="B0001 — ds.piv.plot(background='image', color_by='v')",
+    )
+    _fig.savefig(ROOT / "outputs" / "pair1_pivpy_shortcut.png", dpi=150)
     return
 
 

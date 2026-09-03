@@ -846,14 +846,14 @@ dependencies = [
 requires-dist = [
     { name = "imagecodecs", specifier = ">=2026.8.16" },
     { name = "marimo", specifier = ">=0.24.0" },
-    { name = "pivpy", specifier = ">=0.2.0" },
+    { name = "pivpy", editable = "../pivpy" },
     { name = "scikit-image", specifier = ">=0.26.0" },
 ]
 
 [[package]]
 name = "pivpy"
 version = "0.2.0"
-source = { registry = "https://pypi.org/simple" }
+source = { editable = "../pivpy" }
 dependencies = [
     { name = "dask" },
     { name = "h5netcdf" },
@@ -868,10 +868,33 @@ dependencies = [
     { name = "xarray" },
     { name = "zarr" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d9/08/237975c30dc5b0db2f74a5f54ee45e5aa28c10f0e046055db950ea36d16b/pivpy-0.2.0.tar.gz", hash = "sha256:4b36c6cb0790b7ea89656e75e35702b444c75812e289cedf6a8bd38e9bbe849c", size = 6850127, upload-time = "2026-08-22T22:24:20.299Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/9e/75/61b93db9b1a6eaefcc70f3876668121970bf19b207dd0cc3a9682501753f/pivpy-0.2.0-py3-none-any.whl", hash = "sha256:b63680e9bc3ab6d5c705bc1a3d94ff58c16f3bbe77d07655379ca17794b9aa03", size = 6845495, upload-time = "2026-08-22T22:24:18.381Z" },
+
+[package.metadata]
+requires-dist = [
+    { name = "dask" },
+    { name = "h5netcdf" },
+    { name = "h5py" },
+    { name = "h5py", marker = "extra == 'full'" },
+    { name = "h5py", marker = "extra == 'h5py'" },
+    { name = "lvpyio", marker = "extra == 'full'" },
+    { name = "lvpyio", marker = "extra == 'lvpyio'" },
+    { name = "marimo" },
+    { name = "matplotlib" },
+    { name = "netcdf4", marker = "extra == 'full'" },
+    { name = "netcdf4", marker = "extra == 'netcdf'" },
+    { name = "numpy" },
+    { name = "openpiv", specifier = ">=0.25.1" },
+    { name = "pytest" },
+    { name = "readim", marker = "extra == 'full'" },
+    { name = "readim", marker = "extra == 'readim'" },
+    { name = "scipy" },
+    { name = "setuptools", specifier = ">=68.0.0" },
+    { name = "vortexfitting", marker = "extra == 'full'" },
+    { name = "vortexfitting", marker = "extra == 'vortexfitting'" },
+    { name = "xarray" },
+    { name = "zarr" },
 ]
+provides-extras = ["lvpyio", "readim", "netcdf", "vortexfitting", "h5py", "full"]
 
 [[package]]
 name = "pluggy"
