@@ -13,7 +13,10 @@ def _():
     import matplotlib.pyplot as plt
     import numpy as np
 
-    return Path, iio, mo, np, plt
+    # Repo root, independent of the runner's cwd (VS Code's marimo extension
+    # uses the notebook's own folder; `uv run python notebooks/x.py` uses repo root).
+    ROOT = Path(__file__).resolve().parent.parent
+    return ROOT, iio, mo, np, plt
 
 
 @app.cell
@@ -25,9 +28,9 @@ def _():
 
 
 @app.cell
-def _(iio, np):
+def _(ROOT, iio, np):
     # First test pair: a single dual-frame TIFF (frame A stacked on top of frame B).
-    a = iio.imread(r"sample_data\tiff\B0001.tif")
+    a = iio.imread(ROOT / "sample_data" / "tiff" / "B0001.tif")
     display_min = 0
     display_max = 150
     a = a.astype(float)
@@ -38,13 +41,14 @@ def _(iio, np):
 
 
 @app.cell
-def _(a, np, plt):
+def _(ROOT, a, np, plt):
     a1 = a[:2048, 200:1945]
     a2 = a[2048:, 200:1945]
     plt.figure(figsize=(10, 10))
     plt.imshow(np.stack([a1, a2, a2 * 0], axis=2))
     plt.show()
-    plt.imsave(r"outputs\tmp.png", np.stack([a1, a2, a2 * 0], axis=2))
+    (ROOT / "outputs").mkdir(exist_ok=True)
+    plt.imsave(ROOT / "outputs" / "tmp.png", np.stack([a1, a2, a2 * 0], axis=2))
     return a1, a2
 
 
@@ -66,7 +70,7 @@ def _(a1, a2, mo, np):
 
 
 @app.cell
-def _(a1, a2, filters, np, pyprocess, scaling, tools, validation):
+def _(ROOT, a1, a2, filters, np, pyprocess, scaling, tools, validation):
     # dt is unknown for this camera (not a high-speed camera; see README "Timing").
     # Vectors below are in px/frame until dt is recovered from the DaVis metadata.
     winsize = 64  # >= 4x the measured displacement
@@ -101,19 +105,19 @@ def _(a1, a2, filters, np, pyprocess, scaling, tools, validation):
 
     xs, ys, u3, v3 = scaling.uniform(x, y, u2, v2, scaling_factor=100)
     xs, ys, u3, v3 = tools.transform_coordinates(xs, ys, u3, v3)
-    tools.save(r"outputs\pair1.txt", xs, ys, u3, v3, invalid)
+    tools.save(ROOT / "outputs" / "pair1.txt", xs, ys, u3, v3, invalid)
     return
 
 
 @app.cell
-def _(Path, plt, tools):
+def _(ROOT, plt, tools):
     _fig, _ax = plt.subplots(figsize=(8, 8))
     tools.display_vector_field(
-        Path(r"outputs\pair1.txt"), ax=_ax, scaling_factor=100,
+        ROOT / "outputs" / "pair1.txt", ax=_ax, scaling_factor=100,
         scale=1, width=0.0035,
-        on_img=True, image_name=r"outputs\tmp.png",
+        on_img=True, image_name=str(ROOT / "outputs" / "tmp.png"),
     )
-    _fig.savefig(r"outputs\pair1_quiver.png", dpi=150)
+    _fig.savefig(ROOT / "outputs" / "pair1_quiver.png", dpi=150)
     return
 
 
