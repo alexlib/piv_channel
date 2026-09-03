@@ -20,14 +20,6 @@ def _():
 
 
 @app.cell
-def _():
-    from openpiv import tools, scaling, validation, filters
-    import openpiv.pyprocess as pyprocess
-
-    return filters, pyprocess, scaling, tools, validation
-
-
-@app.cell
 def _(ROOT, iio, np):
     # First test pair: a single dual-frame TIFF (frame A stacked on top of frame B).
     a = iio.imread(ROOT / "sample_data" / "tiff" / "B0001.tif")
@@ -69,55 +61,40 @@ def _(a1, a2, mo, np):
     return
 
 
-@app.cell
-def _(ROOT, a1, a2, filters, np, pyprocess, scaling, tools, validation):
-    # dt is unknown for this camera (not a high-speed camera; see README "Timing").
-    # Vectors below are in px/frame until dt is recovered from the DaVis metadata.
-    winsize = 64  # >= 4x the measured displacement
-    searchsize = 96  # winsize + 2x displacement, with margin
-    overlap = 32  # 50% overlap
-    dt = 1.0
-
-    u0, v0, s2n = pyprocess.extended_search_area_piv(
-        a1.astype(np.int32),
-        a2.astype(np.int32),
-        window_size=winsize,
-        overlap=overlap,
-        dt=dt,
-        search_area_size=searchsize,
-        sig2noise_method="peak2peak",
+@app.cell(hide_code=True)
+def _(mo):
+    _text = (
+        "## Fast, reusable pipeline\n"
+        "The step-by-step exploration above is now packaged as `process_pair()` "
+        "in `piv_pipeline.py` (same parameters: winsize=64, searchsize=96, "
+        "overlap=32, dt=1.0, s2n threshold=1.3). Tested here on the same image; "
+        "reused as-is by `batch_process.py` for the rest of the pairs."
     )
-    x, y = pyprocess.get_coordinates(
-        image_size=a1.shape,
-        search_area_size=searchsize,
-        overlap=overlap,
-    )
-
-    mask_s2n = validation.sig2noise_val(s2n, threshold=1.3)
-    mask_med = validation.local_median_val(u0, v0, u_threshold=3, v_threshold=3, size=1)
-    invalid = mask_s2n | mask_med
-    print(f"Invalid vectors: {invalid.sum()} / {invalid.size} ({100 * invalid.mean():.1f}%)")
-
-    u2, v2 = filters.replace_outliers(
-        u0, v0, invalid,
-        method="localmean", max_iter=10, kernel_size=3,
-    )
-
-    xs, ys, u3, v3 = scaling.uniform(x, y, u2, v2, scaling_factor=100)
-    xs, ys, u3, v3 = tools.transform_coordinates(xs, ys, u3, v3)
-    tools.save(ROOT / "outputs" / "pair1.txt", xs, ys, u3, v3, invalid)
+    mo.md(_text)
     return
 
 
 @app.cell
-def _(ROOT, plt, tools):
+def _():
+    from piv_pipeline import process_pair
+
+    return (process_pair,)
+
+
+@app.cell
+def _(ROOT, process_pair):
+    result = process_pair(ROOT / "sample_data" / "tiff" / "B0001.tif")
+    invalid = result["invalid"]
+    print(f"Invalid vectors: {invalid.sum()} / {invalid.size} ({100 * invalid.mean():.1f}%)")
+    return (result,)
+
+
+@app.cell
+def _(plt, result):
     _fig, _ax = plt.subplots(figsize=(8, 8))
-    tools.display_vector_field(
-        ROOT / "outputs" / "pair1.txt", ax=_ax, scaling_factor=100,
-        scale=1, width=0.0035,
-        on_img=True, image_name=str(ROOT / "outputs" / "tmp.png"),
-    )
-    _fig.savefig(ROOT / "outputs" / "pair1_quiver.png", dpi=150)
+    _ax.quiver(result["x"], result["y"], result["u"], result["v"])
+    _ax.set_aspect("equal")
+    _ax.set_title("process_pair(B0001.tif) — same result as the manual pipeline above")
     return
 
 
