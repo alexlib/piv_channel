@@ -1,0 +1,35 @@
+{
+  "run_name": "channel04_Vmax_0p66_m2sec_steady_state_part_1",
+  "source_folder": "D:\\channel_flow_research\\channel_04\\Project_FlowMaster_260630_130547\\channel_04_Vmax_0p66_m2sec_steady_state_part_1\\exported_images\\channel_04_Vmax_0p66_m2sec_steady_state_part_1",
+  "calibration_source": "D:\\channel_flow_research\\channel_04\\Project_FlowMaster_260630_130547\\Properties\\Calibration\\Calibration.xml",
+  "px_per_mm": 172.88323514796974,
+  "wall_mask": {
+    "method": "sinusoidal_wall_bounds",
+    "wavelength_px": 916,
+    "phase_rad": 1.4,
+    "left_center_px": 147,
+    "left_amplitude_px": -87,
+    "right_center_px": 1900,
+    "right_amplitude_px": 79
+  },
+  "preprocessing": {
+    "method": "high_pass",
+    "high_pass_sigma": 16,
+    "contrast_stretch_percentile": 97.5,
+    "display_min": 0,
+    "display_max": 4000
+  },
+  "piv": {
+    "winsize": 64,
+    "searchsize": 64,
+    "overlap": 16,
+    "s2n_threshold": 1.0,
+    "median_threshold_px_per_frame": 2,
+    "mask_input": true
+  },
+  "validation_result": {
+    "pair": "B0001.im7",
+    "invalid_fraction": 0.415,
+    "notes": "Tuned interactively in channel04_steady_state_pair1.py. Root cause of the earlier ~99% invalid fraction was a units bug (median_threshold compared against u0/v0 in px/s, not px/frame - fixed in piv_pipeline._run_piv, which divides median_threshold by dt before comparing). median_threshold_px_per_frame above is already in the correct, dt-independent units. See README.md for the full investigation."
+  }
+}
