@@ -79,9 +79,18 @@ def _(im7_files, mo, process_im7_pair):
     # Pairs are independent - farm them out across cores instead of one
     # process crunching FFT correlations serially (~3x faster on this box;
     # scaling tops out around the physical core count).
+    # high_pass + these window/threshold settings cut invalid fraction from
+    # ~66% (naive linear clip, original params) to ~2%, verified across the
+    # sequence - same background-removal technique that fixed channel_04's
+    # ~99% invalid, tuned here for this camera/dt (see README).
+    _piv_kw = dict(
+        preprocess="high_pass", hp_sigma=16, hp_pct=97.5,
+        winsize=96, searchsize=96, overlap=32,
+        s2n_threshold=1.0, median_threshold=2,
+    )
     with ProcessPoolExecutor() as _ex:
-        results = list(_ex.map(partial(process_im7_pair, return_image=False), im7_files))
-    results[0] = process_im7_pair(im7_files[0], return_image=True)
+        results = list(_ex.map(partial(process_im7_pair, return_image=False, **_piv_kw), im7_files))
+    results[0] = process_im7_pair(im7_files[0], return_image=True, **_piv_kw)
 
     invalid_fracs = [r["invalid"].mean() for r in results]
     _preview = ', '.join(f'{f:.0%}' for f in invalid_fracs[:10])
@@ -91,8 +100,8 @@ def _(im7_files, mo, process_im7_pair):
         f"(consistent across all {len(results)} frames: {len({r['dt'] for r in results}) == 1})  \n"
         f"Invalid-vector fraction, first frames: {_preview}{_more}  \n"
         f"Mean over all {len(results)} frames: {sum(invalid_fracs) / len(invalid_fracs):.0%} "
-        f"- high, as with the single-pair pipeline; the interrogation window/threshold "
-        f"need tuning, see README."
+        f"- high_pass preprocessing + tuned window/threshold (see README) brought "
+        f"this down from ~66% (naive linear clip, dt-fixed median threshold)."
     )
     return (results,)
 
@@ -119,8 +128,8 @@ def _(CHANNEL_CROP_COLS, FOLDER, PX_PER_MM, piv_run_metadata, results, xr):
         px_per_mm=PX_PER_MM,
         calibration_source=r"D:\channel_flow_research\baseline_channel\Properties\Calibration\Calibration.xml",
         dt=results[0]["dt"],
-        winsize=64, searchsize=96, overlap=32,
-        s2n_threshold=1.3, median_threshold=3,
+        winsize=96, searchsize=96, overlap=32,
+        s2n_threshold=1.0, median_threshold=2,
         source_folder=FOLDER,
         crop_cols=CHANNEL_CROP_COLS,
         history="baseline_steady_state_batch.py",

@@ -401,6 +401,64 @@ def scalar_on_image(ax, image, x, y, scalar, *, cmap="RdBu_r", levels=60,
     return cf
 
 
+def load_vc7_directory(vc7_folder, N=None, crop_to_valid=True, flip_v=True):
+    """Load every .vc7 file in a folder (one DaVis-processed run) into a
+    single time-indexed xarray Dataset, for runs we never independently
+    reprocess (DaVis already gives 100% valid coverage there - see
+    channel04_vc7_vs_openpiv_comparison.py). Analogous to
+    run_steady_state_batch(), but reading pre-existing DaVis vectors instead
+    of running our own PIV.
+
+    crop_to_valid: trim to the outer bounding box of any chc==1 data across
+    all frames (DaVis's own grid extends into dead space past the camera's
+    illuminated FOV - see channel04_vc7_vs_openpiv_comparison.py) - the
+    per-point chc mask still carries any interior invalid pixels, this just
+    drops always-invalid border rows/columns.
+
+    flip_v: DaVis's vc7 reader (pivpy's LaVisionVC7Reader) reports v in the
+    raw row-increasing-downward sense without re-signing for its own
+    y-axis convention (y decreases as row increases) - validated on
+    channel_04 by comparing against our own openpiv output at the channel
+    center (same magnitude, opposite sign; u already agreed). openpiv's
+    tools.transform_coordinates() does this re-signing for us automatically,
+    so flip here to match our convention across all DaVis-only runs.
+
+    Reads are parallelized (~340ms/file measured, each file fully
+    independent - same ProcessPoolExecutor pattern as run_steady_state_batch)
+    - serial would take ~17 min for a 3000-frame run.
+    """
+    from concurrent.futures import ProcessPoolExecutor
+    from pathlib import Path
+
+    import pivpy.io as pivpy_io
+    import xarray as xr
+
+    vc7_files = sorted(Path(vc7_folder).glob("*.vc7"))
+    if N is not None:
+        vc7_files = vc7_files[:N]
+    if not vc7_files:
+        raise ValueError(f"no .vc7 files found in {vc7_folder}")
+
+    with ProcessPoolExecutor() as ex:
+        loaded = list(ex.map(pivpy_io.load_vc7, [str(p) for p in vc7_files]))
+    frames = [d.isel(t=0).assign_coords(t=t) for t, d in enumerate(loaded)]
+    ds = xr.concat(frames, dim="t")
+    if flip_v:
+        ds["v"] = -ds["v"]
+    ds.attrs["source_folder"] = str(vc7_folder)
+    ds.attrs["n_frames"] = len(vc7_files)
+
+    if crop_to_valid:
+        valid = (ds.chc == 1).any(dim="t").values
+        valid_rows = np.where(valid.any(axis=1))[0]
+        valid_cols = np.where(valid.any(axis=0))[0]
+        ds = ds.isel(
+            y=slice(valid_rows.min(), valid_rows.max() + 1),
+            x=slice(valid_cols.min(), valid_cols.max() + 1),
+        )
+    return ds
+
+
 def run_steady_state_batch(im7_folder, config, out_dir, run_name, N=None):
     """Run the full steady-state PIV batch (parallel process_im7_pair over
     every pair in im7_folder, pivpy Dataset build, reynolds_decomposition,

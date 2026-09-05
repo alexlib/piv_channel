@@ -1170,6 +1170,7 @@ dependencies = [
     { name = "imagecodecs" },
     { name = "lvpyio" },
     { name = "marimo" },
+    { name = "pandas" },
     { name = "pivpy" },
     { name = "scikit-image" },
 ]
@@ -1179,6 +1180,7 @@ requires-dist = [
     { name = "imagecodecs", specifier = ">=2026.8.16" },
     { name = "lvpyio", specifier = ">=1.4.0" },
     { name = "marimo", specifier = ">=0.24.0" },
+    { name = "pandas", specifier = ">=3.0.5" },
     { name = "pivpy", editable = "../pivpy" },
     { name = "scikit-image", specifier = ">=0.26.0" },
 ]

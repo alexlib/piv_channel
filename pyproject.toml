@@ -8,6 +8,7 @@ dependencies = [
     "imagecodecs>=2026.8.16",
     "lvpyio>=1.4.0",
     "marimo>=0.24.0",
+    "pandas>=3.0.5",
     "pivpy>=0.2.0",
     "scikit-image>=0.26.0",
 ]
