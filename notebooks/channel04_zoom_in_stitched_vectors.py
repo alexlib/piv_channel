@@ -317,7 +317,7 @@ def _(mo):
         options=["mag", "vorticity", "none"], value="mag", label="background"
     )
     arrow_width_slider = mo.ui.slider(0.002, 0.02, value=0.004, step=0.001, label="arrow width")
-    arrow_length_slider = mo.ui.slider(0.5, 2.0, value=1.0, step=0.1, label="arrow length")
+    arrow_length_slider = mo.ui.slider(0.1, 10.0, value=1.0, step=0.5, label="arrow length")
     skip_slider = mo.ui.slider(1, 15, value=5, step=1, label="arrow skip (density)")
     mo.vstack([cmap_dd, background_dd, arrow_width_slider, arrow_length_slider, skip_slider])
     return (
@@ -530,7 +530,7 @@ def _(
         image_extent=image_extent_mm,
         image_cmap="gray",
         quiver=True,
-        streamlines=False,
+        streamlines=True,
         cmap=cmap_dd.value,
         color_by="mag",
         arrow_width=arrow_width_slider.value,
