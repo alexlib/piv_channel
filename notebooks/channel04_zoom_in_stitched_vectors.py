@@ -148,21 +148,30 @@ def _(ds_a, ds_b, mo, np, wall_mask):
         )
 
     def mask_outside_wall(ds):
+        # Two independent invalidity sources, both must be excluded before
+        # interpolation: (1) our own wall-position mask, and (2) DaVis's own
+        # chc==0 flag - DaVis zero-fills low-confidence vectors instead of
+        # leaving them NaN, so without this a band of literal zero-velocity
+        # "ghost" vectors near each half's raw-frame edge (where DaVis's own
+        # correlation was unreliable) gets treated as real data and smeared
+        # across the seam by .interp(), showing up as a near-zero-speed band.
         row_px_2d, col_px_2d = np.meshgrid(ds.y.values, ds.x.values, indexing="ij")
         right_edge_2d = right_edge_at(row_px_2d)
-        outside = col_px_2d > right_edge_2d
+        outside_wall = col_px_2d > right_edge_2d
+        invalid = outside_wall | (ds["chc"].values < 0.5)
         ds = ds.copy()
-        ds["u"] = ds["u"].where(~outside)
-        ds["v"] = ds["v"].where(~outside)
-        ds["chc"] = ds["chc"].where(~outside, 0.0)
+        ds["u"] = ds["u"].where(~invalid)
+        ds["v"] = ds["v"].where(~invalid)
+        ds["chc"] = ds["chc"].where(~invalid, 0.0)
         return ds
 
     ds_a_masked = mask_outside_wall(ds_a)
     ds_b_masked = mask_outside_wall(ds_b)
-    mo.md(
-        f"first_half_case_1 valid fraction after wall mask: {float((ds_a_masked.chc > 0.5).mean()):.1%}  \n"
-        f"second_half valid fraction after wall mask: {float((ds_b_masked.chc > 0.5).mean()):.1%}"
-    )
+    _frac_a = float((ds_a_masked.chc > 0.5).mean())
+    _frac_b = float((ds_b_masked.chc > 0.5).mean())
+    mo.md(f"""first_half_case_1 valid fraction after wall + chc mask: {_frac_a:.1%}
+    second_half valid fraction after wall + chc mask: {_frac_b:.1%}""")
+
     return ds_a_masked, ds_b_masked
 
 
@@ -184,7 +193,17 @@ def _(mo):
 
 @app.cell
 def _(ds_a_masked, ds_b_masked, np, xr):
-    combined_native = xr.concat([ds_a_masked, ds_b_masked], dim="y")
+    # Drop rows with zero valid columns before concatenating - these carry no
+    # real information (every point already NaN from the wall+chc mask), and
+    # leaving them in the interp source just forces .interp() to bracket the
+    # gap with an all-NaN row, propagating NaN into the output instead of
+    # bridging to the next row that actually has data.
+    _frac_valid_a = (~np.isnan(ds_a_masked.u.values)).mean(axis=1)
+    _frac_valid_b = (~np.isnan(ds_b_masked.u.values)).mean(axis=1)
+    ds_a_trimmed = ds_a_masked.isel(y=_frac_valid_a > 0)
+    ds_b_trimmed = ds_b_masked.isel(y=_frac_valid_b > 0)
+
+    combined_native = xr.concat([ds_a_trimmed, ds_b_trimmed], dim="y")
 
     # one common regular grid at the finer of the two halves' native spacing
     _dx = float(np.diff(ds_a_masked.x.values).mean())
@@ -194,7 +213,8 @@ def _(ds_a_masked, ds_b_masked, np, xr):
 
     combined_ds = combined_native.interp(x=common_x, y=common_y, method="linear")
     combined_ds
-    return (combined_ds,)
+
+    return combined_ds, ds_a_trimmed, ds_b_trimmed
 
 
 @app.cell
@@ -272,27 +292,69 @@ def add_compact_colorbar(fig, ax, label):
 
 
 @app.cell
+def _(PX_PER_MM, ds_a_trimmed, ds_b_trimmed):
+    # Cartesian mm (y-up) position of each half's own true data edge (last/first
+    # row with any chc-valid vector, after the wall+chc mask and the fully-
+    # invalid-row trim in Step 3) - marks where one half's real measurements
+    # end and interpolation into the other half's real measurements begins,
+    # so it's visually clear this is a stitched image, not one continuous shot.
+    half_a_edge_y_mm = -float(ds_a_trimmed.y.max()) / PX_PER_MM
+    half_b_edge_y_mm = -float(ds_b_trimmed.y.min()) / PX_PER_MM
+
+    return half_a_edge_y_mm, half_b_edge_y_mm
+
+
+@app.cell
 def _(
     arrow_length_slider,
     arrow_width_slider,
     background_dd,
     cmap_dd,
     combined_cart,
+    half_a_edge_y_mm,
+    half_b_edge_y_mm,
+    np,
+    plt,
     skip_slider,
 ):
-    _fig, _ax = combined_cart.piv.plot(
-        background=None if background_dd.value == "none" else background_dd.value,
+    # arrow_length_slider controls arrow_scale (matplotlib quiver: SMALLER
+    # scale = LONGER arrows) - reproducing pivpy's own auto-scale formula so
+    # length=1.0 matches what piv.plot(arrow_scale=None) would auto-pick.
+    _dx = float(np.diff(combined_cart.x.values).mean())
+    _dy = float(np.diff(combined_cart.y.values).mean())
+    _med_speed = float(np.nanmedian(np.hypot(combined_cart.u.values, combined_cart.v.values)))
+    _target_len = 0.85 * min(skip_slider.value * abs(_dx), skip_slider.value * abs(_dy))
+    _auto_scale = (_med_speed / _target_len) if _target_len > 0 else 1.0
+    _arrow_scale = _auto_scale / arrow_length_slider.value
+
+    # pivpy.piv.plot() draws a colorbar per colored artist independently
+    # (background contourf AND colored quiver each gated by the same
+    # colorbar=True default, with no check for redundancy) - setting both
+    # background= and color_by= to a scalar draws two colorbars for the same
+    # data. Not a two-halves/stitching issue - it reproduces on a single frame
+    # too. Fix: only color the quiver when there's no scalar background, and
+    # always draw our own single compact colorbar via colorbar=False.
+    _fig, _ax = plt.subplots(figsize=(6, 13))
+    _has_background = background_dd.value != "none"
+    combined_cart.piv.plot(
+        ax=_ax,
+        background=background_dd.value if _has_background else None,
         quiver=True,
         streamlines=False,
         cmap=cmap_dd.value,
-        color_by="mag",
-        arrow_length=arrow_length_slider.value,
+        color_by=None if _has_background else "mag",
+        arrow_scale=_arrow_scale,
         arrow_width=arrow_width_slider.value,
         skip=skip_slider.value,
+        colorbar=False,
         title="Stitched, wall-masked, interpolated field (first_half_case_1 + second_half)",
     )
-    # _fig.set_size_inches(6, 20)
+    _ax.axhline(half_a_edge_y_mm, color="cyan", linewidth=1.0, linestyle="--", label="first_half_case_1 data edge")
+    _ax.axhline(half_b_edge_y_mm, color="magenta", linewidth=1.0, linestyle="--", label="second_half data edge")
+    _ax.legend(fontsize=7, loc="lower right")
+    add_compact_colorbar(_fig, _ax, "speed [m/s]")
     _fig.gca()
+
     return
 
 
@@ -361,6 +423,8 @@ def _(
     arrow_width_slider,
     cmap_dd,
     combined_cart,
+    half_a_edge_y_mm,
+    half_b_edge_y_mm,
     image_extent_mm,
     plt,
     skip_slider,
@@ -386,8 +450,12 @@ def _(
         colorbar=False,
         title="Stitched raw image + wall-masked, interpolated quiver",
     )
+    _ax.axhline(half_a_edge_y_mm, color="cyan", linewidth=1.0, linestyle="--", label="first_half_case_1 data edge")
+    _ax.axhline(half_b_edge_y_mm, color="magenta", linewidth=1.0, linestyle="--", label="second_half data edge")
+    _ax.legend(fontsize=7, loc="lower right")
     add_compact_colorbar(_fig, _ax, "speed [m/s]")
     _fig.gca()
+
     return
 
 
