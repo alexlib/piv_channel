@@ -60,19 +60,32 @@ def _(mo):
 
 @app.cell
 def _():
-    RAW_H = 2432  # raw image height per half (established in the wall-mask notebook)
+    RAW_H = 2390 # 2432  # raw image height per half (established in the wall-mask notebook)
+    RAW_C = 80 # column offset
+
     PX_PER_MM = 995.28671814631889  # channel04_zoom_in camera, from channel04_zoom_in_case2_pair1.py
 
-    FIRST_HALF_1_VC7 = (
-        r"D:\channel_flow_research\channel_04_zoom_in\Project_FlowMaster_260705_110445"
-        r"\first_half_case_1\ImgPreproc_03\PIV_MPd(4x24x24_75%ov_ImgCorr)\B00001.vc7"
-    )
-    SECOND_HALF_VC7 = (
-        r"D:\channel_flow_research\channel_04_zoom_in\Project_FlowMaster_260705_110445"
-        r"\second_half\ImgPreproc\PIV_MPd(4x24x24_75%ov_ImgCorr)\B00001.vc7"
-    )
+    # Artificial, cosmetic-only registration nudge (per user request) - not a
+    # calibration fix. second_half's fitted-wall-vs-actual-reflection alignment
+    # looked slightly off relative to first_half_case_1; shifting second_half
+    # left by this amount visually tightens it. Applied identically to
+    # second_half's vector data (below) and its portion of the raw stitched
+    # image (Step 6), so vectors/mask/image all move together.
+    SECOND_HALF_COSMETIC_X_SHIFT_MM = -0.1
+
+    FIRST_HALF_1_VC7 = "D:/channel_flow_research/channel_04_zoom_in/Project_FlowMaster_260705_110445/first_half_case_1/ImgPreproc_03/PIV_MPd(4x24x24_75%ov_ImgCorr)/B00001.vc7"
+    SECOND_HALF_VC7 = "D:/channel_flow_research/channel_04_zoom_in/Project_FlowMaster_260705_110445/second_half/ImgPreproc/PIV_MPd(4x24x24_75%ov_ImgCorr)/B00001.vc7"
     WALL_MASK_JSON = "notebooks/channel04_zoom_in_second_half_wall_mask.json"
-    return FIRST_HALF_1_VC7, PX_PER_MM, RAW_H, SECOND_HALF_VC7, WALL_MASK_JSON
+
+    return (
+        FIRST_HALF_1_VC7,
+        PX_PER_MM,
+        RAW_C,
+        RAW_H,
+        SECOND_HALF_COSMETIC_X_SHIFT_MM,
+        SECOND_HALF_VC7,
+        WALL_MASK_JSON,
+    )
 
 
 @app.cell
@@ -84,8 +97,16 @@ def _(mo):
 
 
 @app.cell
-def _(FIRST_HALF_1_VC7, PX_PER_MM, RAW_H, SECOND_HALF_VC7, mo, pivpy_io):
-    def to_absolute_px(ds, row_offset):
+def _(
+    FIRST_HALF_1_VC7,
+    PX_PER_MM,
+    RAW_C,
+    RAW_H,
+    SECOND_HALF_VC7,
+    mo,
+    pivpy_io,
+):
+    def to_absolute_px(ds, row_offset, col_offset=0):
         """DaVis's local mm coords reset per crop (see markdown above) - only
         the *scale* (mm/px, from the shared calibration) is trustworthy, not
         the offset. Rebuild absolute pixel coordinates from that scale plus
@@ -96,28 +117,37 @@ def _(FIRST_HALF_1_VC7, PX_PER_MM, RAW_H, SECOND_HALF_VC7, mo, pivpy_io):
         y = ds.y.values
         x = ds.x.values
         row_px = (y.max() - y) * PX_PER_MM + row_offset
-        col_px = (x - x.min()) * PX_PER_MM
+        col_px = (x - x.min()) * PX_PER_MM + col_offset
+    
         return ds.assign_coords(y=("y", row_px), x=("x", col_px))
 
     ds_a_raw = pivpy_io.load_vc7(FIRST_HALF_1_VC7).isel(t=0)
     ds_b_raw = pivpy_io.load_vc7(SECOND_HALF_VC7).isel(t=0)
 
     ds_a = to_absolute_px(ds_a_raw, row_offset=0)
-    ds_b = to_absolute_px(ds_b_raw, row_offset=RAW_H)
+    ds_b = to_absolute_px(ds_b_raw, row_offset=RAW_H, col_offset=RAW_C)
+
 
     # DaVis's v also needs the sign flip validated on channel_04's vc7-vs-openpiv
     # comparison (see load_vc7_directory in piv_pipeline.py).
     ds_a["v"] = -ds_a["v"]
     ds_b["v"] = -ds_b["v"]
 
-    mo.md(
-        f"first_half_case_1: row_px {float(ds_a.y.min()):.1f} to {float(ds_a.y.max()):.1f}, "
-        f"col_px {float(ds_a.x.min()):.1f} to {float(ds_a.x.max()):.1f}  \n"
-        f"second_half: row_px {float(ds_b.y.min()):.1f} to {float(ds_b.y.max()):.1f}, "
-        f"col_px {float(ds_b.x.min()):.1f} to {float(ds_b.x.max()):.1f}  \n"
-        f"gap between halves: {float(ds_b.y.min()) - float(ds_a.y.max()):.1f} px "
-        f"(expected: interrogation-window edge margin, not a physical gap)"
-    )
+    # NOTE: SECOND_HALF_COSMETIC_X_SHIFT_MM is deliberately NOT applied to
+    # ds_b's coordinates here - doing that de-aligns ds_a/ds_b's native x-grids
+    # into interleaved, mutually-exclusive positions, so xr.concat's outer join
+    # + .interp() can barely bridge anything (broke to <1% valid data when
+    # tried). The shift only needs to move the *raw background image* (Step 6)
+    # to visually match the image's wall reflection against the already-correct
+    # fitted mask - it does not need to move the vector data itself.
+
+    _line1 = f"first_half_case_1: row_px {float(ds_a.y.min()):.1f} to {float(ds_a.y.max()):.1f}, col_px {float(ds_a.x.min()):.1f} to {float(ds_a.x.max()):.1f}"
+    _line2 = f"second_half: row_px {float(ds_b.y.min()):.1f} to {float(ds_b.y.max()):.1f}, col_px {float(ds_b.x.min()):.1f} to {float(ds_b.x.max()):.1f}"
+    _line3 = f"gap between halves: {float(ds_b.y.min()) - float(ds_a.y.max()):.1f} px (expected: interrogation-window edge margin, not a physical gap)"
+    mo.md(f"""{_line1}
+    {_line2}
+    {_line3}""")
+
     return ds_a, ds_b
 
 
@@ -243,6 +273,34 @@ def _(PX_PER_MM, combined_ds):
 
 
 @app.cell
+def _(SECOND_HALF_COSMETIC_X_SHIFT_MM, combined_cart, half_b_edge_y_mm, np):
+    # Cosmetic-only display copy: shift second_half's chunk sideways by the
+    # same amount as the raw image (SECOND_HALF_COSMETIC_X_SHIFT_MM), applied
+    # to the already-gridded, already-masked data - not before interpolation.
+    # Doing it there (on ds_b's coordinates, pre-concat) de-aligns the two
+    # halves' native x-grids into interleaved, mutually-exclusive positions and
+    # breaks .interp() almost entirely (valid data dropped from ~27% to <1%
+    # when tried). Rolling the already-regular-gridded array instead just moves
+    # u/v/chc sideways as one rigid block - both plots (with or without the
+    # image background) now show the same shift, arrows and mask included.
+    combined_cart_display = combined_cart.copy(deep=True)
+    _dx = float(np.diff(combined_cart.x.values).mean())
+    _shift_cols = round(SECOND_HALF_COSMETIC_X_SHIFT_MM / _dx)
+    _is_second_half = combined_cart.y.values <= half_b_edge_y_mm
+    for _var in ("u", "v", "chc"):
+        _arr = combined_cart_display[_var].values
+        _sub = np.roll(_arr[_is_second_half], _shift_cols, axis=1)
+        if _shift_cols > 0:
+            _sub[:, :_shift_cols] = np.nan
+        elif _shift_cols < 0:
+            _sub[:, _shift_cols:] = np.nan
+        _arr[_is_second_half] = _sub
+    combined_cart_display
+
+    return (combined_cart_display,)
+
+
+@app.cell
 def _(mo):
     mo.md("""
     ## Step 5 - pivpy plot of the stitched, masked, interpolated field
@@ -310,7 +368,7 @@ def _(
     arrow_width_slider,
     background_dd,
     cmap_dd,
-    combined_cart,
+    combined_cart_display,
     half_a_edge_y_mm,
     half_b_edge_y_mm,
     np,
@@ -320,9 +378,9 @@ def _(
     # arrow_length_slider controls arrow_scale (matplotlib quiver: SMALLER
     # scale = LONGER arrows) - reproducing pivpy's own auto-scale formula so
     # length=1.0 matches what piv.plot(arrow_scale=None) would auto-pick.
-    _dx = float(np.diff(combined_cart.x.values).mean())
-    _dy = float(np.diff(combined_cart.y.values).mean())
-    _med_speed = float(np.nanmedian(np.hypot(combined_cart.u.values, combined_cart.v.values)))
+    _dx = float(np.diff(combined_cart_display.x.values).mean())
+    _dy = float(np.diff(combined_cart_display.y.values).mean())
+    _med_speed = float(np.nanmedian(np.hypot(combined_cart_display.u.values, combined_cart_display.v.values)))
     _target_len = 0.85 * min(skip_slider.value * abs(_dx), skip_slider.value * abs(_dy))
     _auto_scale = (_med_speed / _target_len) if _target_len > 0 else 1.0
     _arrow_scale = _auto_scale / arrow_length_slider.value
@@ -334,9 +392,12 @@ def _(
     # data. Not a two-halves/stitching issue - it reproduces on a single frame
     # too. Fix: only color the quiver when there's no scalar background, and
     # always draw our own single compact colorbar via colorbar=False.
+    #
+    # Uses combined_cart_display (not combined_cart) so the cosmetic second_half
+    # shift shows here too, consistent with Step 6's image-backed plot.
     _fig, _ax = plt.subplots(figsize=(6, 13))
     _has_background = background_dd.value != "none"
-    combined_cart.piv.plot(
+    combined_cart_display.piv.plot(
         ax=_ax,
         background=background_dd.value if _has_background else None,
         quiver=True,
@@ -351,6 +412,7 @@ def _(
     )
     _ax.axhline(half_a_edge_y_mm, color="cyan", linewidth=1.0, linestyle="--", label="first_half_case_1 data edge")
     _ax.axhline(half_b_edge_y_mm, color="magenta", linewidth=1.0, linestyle="--", label="second_half data edge")
+    _ax.set_xlim(0, 2)
     _ax.legend(fontsize=7, loc="lower right")
     add_compact_colorbar(_fig, _ax, "speed [m/s]")
     _fig.gca()
@@ -386,7 +448,14 @@ def _():
 
 
 @app.cell
-def _(FIRST_HALF_1_IM7, SECOND_HALF_IM7, lv, np):
+def _(
+    FIRST_HALF_1_IM7,
+    PX_PER_MM,
+    SECOND_HALF_COSMETIC_X_SHIFT_MM,
+    SECOND_HALF_IM7,
+    lv,
+    np,
+):
     import openpiv.preprocess as _pp
 
     def _to_uint8_highpass(frame, sigma=16, pct=99.0):
@@ -401,10 +470,27 @@ def _(FIRST_HALF_1_IM7, SECOND_HALF_IM7, lv, np):
         hp = np.clip(hp, 0, pmax)
         return ((255.0 / pmax) * hp).astype(np.uint8)
 
+    def _shift_cols(frame, shift_px):
+        # positive shift_px moves content right, negative moves it left;
+        # newly-exposed edge is zero-filled (matches SECOND_HALF_COSMETIC_X_SHIFT_MM).
+        out = np.zeros_like(frame)
+        if shift_px == 0:
+            return frame.copy()
+        elif shift_px > 0:
+            out[:, shift_px:] = frame[:, :-shift_px]
+        else:
+            out[:, :shift_px] = frame[:, -shift_px:]
+        return out
+
     frame_a_raw = np.asarray(lv.read_buffer(FIRST_HALF_1_IM7).as_masked_array(0).data)
     frame_b_raw = np.asarray(lv.read_buffer(SECOND_HALF_IM7).as_masked_array(0).data)
-    stitched_image = np.vstack([_to_uint8_highpass(frame_a_raw), _to_uint8_highpass(frame_b_raw)])
+    frame_a_proc = _to_uint8_highpass(frame_a_raw)
+    frame_b_proc = _to_uint8_highpass(frame_b_raw)
+    _shift_px = round(SECOND_HALF_COSMETIC_X_SHIFT_MM * PX_PER_MM)
+    frame_b_proc = _shift_cols(frame_b_proc, _shift_px)
+    stitched_image = np.vstack([frame_a_proc, frame_b_proc])
     stitched_image.shape
+
     return (stitched_image,)
 
 
@@ -422,7 +508,7 @@ def _(PX_PER_MM, stitched_image):
 def _(
     arrow_width_slider,
     cmap_dd,
-    combined_cart,
+    combined_cart_display,
     half_a_edge_y_mm,
     half_b_edge_y_mm,
     image_extent_mm,
@@ -434,8 +520,10 @@ def _(
     # draw its own colorbar (it's a grayscale imshow, not a scalar mesh), so
     # color_by="mag" here is the sole (not duplicated) colorbar; still
     # disabled in favor of add_compact_colorbar() for sensible proportions.
+    # Uses combined_cart_display so vectors/mask shift the same way as the
+    # already-shifted background image (see the combined_cart_display cell).
     _fig, _ax = plt.subplots(figsize=(6, 13))
-    combined_cart.piv.plot(
+    combined_cart_display.piv.plot(
         ax=_ax,
         background="image",
         image=stitched_image,
@@ -452,6 +540,7 @@ def _(
     )
     _ax.axhline(half_a_edge_y_mm, color="cyan", linewidth=1.0, linestyle="--", label="first_half_case_1 data edge")
     _ax.axhline(half_b_edge_y_mm, color="magenta", linewidth=1.0, linestyle="--", label="second_half data edge")
+    _ax.set_xlim(0, 2)
     _ax.legend(fontsize=7, loc="lower right")
     add_compact_colorbar(_fig, _ax, "speed [m/s]")
     _fig.gca()
