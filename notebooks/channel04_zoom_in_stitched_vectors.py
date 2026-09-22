@@ -148,7 +148,7 @@ def _(
     {_line2}
     {_line3}""")
 
-    return ds_a, ds_b
+    return ds_a, ds_b, to_absolute_px
 
 
 @app.cell
@@ -202,7 +202,7 @@ def _(ds_a, ds_b, mo, np, wall_mask):
     mo.md(f"""first_half_case_1 valid fraction after wall + chc mask: {_frac_a:.1%}
     second_half valid fraction after wall + chc mask: {_frac_b:.1%}""")
 
-    return ds_a_masked, ds_b_masked
+    return ds_a_masked, ds_b_masked, mask_outside_wall
 
 
 @app.cell
@@ -537,6 +537,148 @@ def _(
         skip=skip_slider.value,
         colorbar=False,
         title="Stitched raw image + wall-masked, interpolated quiver",
+    )
+    _ax.axhline(half_a_edge_y_mm, color="cyan", linewidth=1.0, linestyle="--", label="first_half_case_1 data edge")
+    _ax.axhline(half_b_edge_y_mm, color="magenta", linewidth=1.0, linestyle="--", label="second_half data edge")
+    _ax.set_xlim(0, 2)
+    _ax.legend(fontsize=7, loc="lower right")
+    add_compact_colorbar(_fig, _ax, "speed [m/s]")
+    _fig.gca()
+
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md("""
+    ## Step 7 - average flow field, canonical cavity vortex
+
+    Time-averaged over `N_AVG_FRAMES` frames from both halves (not just the
+    single representative frame used above) - averaging out turbulent
+    fluctuations is what reveals the steady recirculation structure, a
+    single instantaneous frame is too noisy to show it cleanly. Same
+    wall+chc masking, gap-bridging, and cosmetic alignment as the
+    single-frame pipeline above, applied to the time-mean field instead.
+    """)
+    return
+
+
+@app.cell
+def _(
+    FIRST_HALF_1_VC7,
+    RAW_H,
+    SECOND_HALF_VC7,
+    mask_outside_wall,
+    pivpy_io,
+    to_absolute_px,
+    xr,
+):
+    import os
+    from pathlib import Path
+    from concurrent.futures import ProcessPoolExecutor
+
+    N_AVG_FRAMES = 150
+
+    _dir_a = os.path.dirname(FIRST_HALF_1_VC7)
+    _dir_b = os.path.dirname(SECOND_HALF_VC7)
+    _files_a = sorted(Path(_dir_a).glob("*.vc7"))[:N_AVG_FRAMES]
+    _files_b = sorted(Path(_dir_b).glob("*.vc7"))[:N_AVG_FRAMES]
+
+    with ProcessPoolExecutor() as _ex:
+        _loaded_a = list(_ex.map(pivpy_io.load_vc7, [str(p) for p in _files_a]))
+        _loaded_b = list(_ex.map(pivpy_io.load_vc7, [str(p) for p in _files_b]))
+
+    def _process_one(ds_raw, row_offset):
+        ds = to_absolute_px(ds_raw.isel(t=0), row_offset)
+        ds["v"] = -ds["v"]
+        return mask_outside_wall(ds)
+
+    _processed_a = [_process_one(d, 0) for d in _loaded_a]
+    _processed_b = [_process_one(d, RAW_H) for d in _loaded_b]
+
+    mean_a = xr.concat(_processed_a, dim="t").mean(dim="t", skipna=True)
+    mean_b = xr.concat(_processed_b, dim="t").mean(dim="t", skipna=True)
+    f"loaded and averaged {len(_files_a)} + {len(_files_b)} frames"
+
+    return N_AVG_FRAMES, mean_a, mean_b
+
+
+@app.cell
+def _(
+    PX_PER_MM,
+    SECOND_HALF_COSMETIC_X_SHIFT_MM,
+    ds_a_masked,
+    half_b_edge_y_mm,
+    mean_a,
+    mean_b,
+    np,
+    xr,
+):
+    # same trim-then-concat-then-interp as the single-frame pipeline (Step 3)
+    _frac_valid_a = (~np.isnan(mean_a.u.values)).mean(axis=1)
+    _frac_valid_b = (~np.isnan(mean_b.u.values)).mean(axis=1)
+    _mean_a_trimmed = mean_a.isel(y=_frac_valid_a > 0)
+    _mean_b_trimmed = mean_b.isel(y=_frac_valid_b > 0)
+
+    _combined_mean_native = xr.concat([_mean_a_trimmed, _mean_b_trimmed], dim="y")
+    _dx = float(np.diff(ds_a_masked.x.values).mean())
+    _dy = float(np.diff(ds_a_masked.y.values).mean())
+    _common_x = np.arange(_combined_mean_native.x.min(), _combined_mean_native.x.max(), _dx)
+    _common_y = np.arange(_combined_mean_native.y.min(), _combined_mean_native.y.max(), _dy)
+    combined_mean_ds = _combined_mean_native.interp(x=_common_x, y=_common_y, method="linear")
+
+    # Cartesian mm, y-up (pivpy's expected convention - see Step 4)
+    combined_mean_cart = combined_mean_ds.assign_coords(
+        x=("x", combined_mean_ds.x.values / PX_PER_MM),
+        y=("y", -combined_mean_ds.y.values / PX_PER_MM),
+    )
+
+    # same cosmetic second_half shift as combined_cart_display, applied here too
+    combined_mean_display = combined_mean_cart.copy(deep=True)
+    _dxm = float(np.diff(combined_mean_cart.x.values).mean())
+    _shift_cols = round(SECOND_HALF_COSMETIC_X_SHIFT_MM / _dxm)
+    _is_second_half = combined_mean_cart.y.values <= half_b_edge_y_mm
+    for _var in ("u", "v", "chc"):
+        _arr = combined_mean_display[_var].values
+        _sub = np.roll(_arr[_is_second_half], _shift_cols, axis=1)
+        if _shift_cols > 0:
+            _sub[:, :_shift_cols] = np.nan
+        elif _shift_cols < 0:
+            _sub[:, _shift_cols:] = np.nan
+        _arr[_is_second_half] = _sub
+    combined_mean_display
+
+    return (combined_mean_display,)
+
+
+@app.cell
+def _(
+    N_AVG_FRAMES,
+    arrow_width_slider,
+    cmap_dd,
+    combined_mean_display,
+    half_a_edge_y_mm,
+    half_b_edge_y_mm,
+    image_extent_mm,
+    plt,
+    skip_slider,
+    stitched_image,
+):
+    _fig, _ax = plt.subplots(figsize=(6, 13))
+    combined_mean_display.piv.plot(
+        ax=_ax,
+        background="image",
+        image=stitched_image,
+        image_extent=image_extent_mm,
+        image_cmap="gray",
+        quiver=True,
+        streamlines=True,
+        cmap=cmap_dd.value,
+        color_by="mag",
+        arrow_width=arrow_width_slider.value,
+        skip=skip_slider.value,
+        colorbar=False,
+        title=f"Average flow field over {N_AVG_FRAMES} frames - canonical cavity vortex",
     )
     _ax.axhline(half_a_edge_y_mm, color="cyan", linewidth=1.0, linestyle="--", label="first_half_case_1 data edge")
     _ax.axhline(half_b_edge_y_mm, color="magenta", linewidth=1.0, linestyle="--", label="second_half data edge")
