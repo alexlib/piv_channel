@@ -654,14 +654,11 @@ def _(
 @app.cell
 def _(
     N_AVG_FRAMES,
-    arrow_width_slider,
-    cmap_dd,
     combined_mean_display,
     half_a_edge_y_mm,
     half_b_edge_y_mm,
     image_extent_mm,
     plt,
-    skip_slider,
     stitched_image,
 ):
     _fig, _ax = plt.subplots(figsize=(6, 13))
@@ -673,10 +670,11 @@ def _(
         image_cmap="gray",
         quiver=True,
         streamlines=True,
-        cmap=cmap_dd.value,
+        cmap='coolwarm',
         color_by="mag",
-        arrow_width=arrow_width_slider.value,
-        skip=skip_slider.value,
+        arrow_width=.005,
+        arrow_length=15.0,
+        skip=20,
         colorbar=False,
         title=f"Average flow field over {N_AVG_FRAMES} frames - canonical cavity vortex",
     )
