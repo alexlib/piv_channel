@@ -459,6 +459,212 @@ def load_vc7_directory(vc7_folder, N=None, crop_to_valid=True, flip_v=True):
     return ds
 
 
+def channel_center(x, center=None, half_width=None):
+    """Single channel coordinate frame with x = 0 at the centerline.
+
+    Returns ``(center, half_width, x_centered)``. Defaults are data-driven:
+    center = grid midpoint, half_width = half the grid span. For the
+    baseline zoom-out this yields b ~= 5.0 mm, matching the 10 mm gap.
+    Pass explicit values to lock one common frame across runs.
+    """
+    x = np.asarray(x, dtype=float)
+    xc = float(center) if center is not None else float(0.5 * (x.min() + x.max()))
+    b = float(half_width) if half_width is not None else float(0.5 * (x.max() - x.min()))
+    if not np.isfinite(b) or b <= 0:
+        raise ValueError("half_width must be positive")
+    return xc, b, x - xc
+
+
+def bulk_velocity(v_mean_x, x, half_width):
+    """Cross-sectional bulk velocity ``U_bulk = 1/(2b) integral V(x) dx``.
+
+    Trapezoidal rule over the finite (valid) points of a time/row-averaged
+    profile. The sign follows the data (negative = downward streamwise flow
+    here); normalizing by it keeps the profile shape with a positive
+    centerline (~1.5 for parabolic, ~1.1-1.3 for turbulent).
+    """
+    v = np.asarray(v_mean_x, dtype=float)
+    xx = np.asarray(x, dtype=float)
+    ok = np.isfinite(v) & np.isfinite(xx)
+    if ok.sum() < 2:
+        raise ValueError("not enough valid profile points for bulk velocity")
+    order = np.argsort(xx[ok])
+    return float(np.trapezoid(v[ok][order], xx[ok][order]) / (2.0 * float(half_width)))
+
+
+def profile_evolution(
+    ds,
+    component="v",
+    window=5,
+    every_s=60.0,
+    max_curves=10,
+    time_coord=None,
+    center=None,
+    half_width=None,
+    normalize=False,
+    cmap="plasma",
+    figsize=(9, 10),
+):
+    """Row-averaged, time-smoothed cross-channel profiles + bulk-velocity trace.
+
+    For each frame: keep only valid vectors (``chc``), average over a
+    centered ``window`` of consecutive frames (xarray ``rolling``) and over
+    all rows (``y``). Plots up to ``max_curves`` profiles ``component(x)``
+    colored by continuous time; panel 2 traces the per-frame ensemble bulk
+    velocity ``U_bulk(t) = 1/(2b) integral V(x,t) dx`` - the flow-rate proxy,
+    far less noisy and more representative than a single mid-channel point -
+    with markers at the drawn-profile times.
+
+    Coordinates: ``channel_center()`` puts x = 0 at the centerline.
+    ``normalize=False`` plots mm/s vs. centered mm; ``normalize=True``
+    plots ``V/U_bulk`` vs. ``x/b`` with a single reference bulk velocity
+    ``U_bulk = 1/(2b) integral V dx`` from the time-mean profile (one
+    reference for all curves, so a slowdown stays visible instead of being
+    normalized away curve by curve). ``prof.attrs`` carries
+    ``center``/``half_width``/``bulk_velocity``.
+
+    PIVPy vs. xarray split (cf. ``skills/pivpy/SKILL.md``): invalid masking
+    follows pivpy's canonical ``(u, v, chc)`` data model, but pivpy offers
+    no primitive for this plot - ``spaverf()`` broadcasts the mean back to
+    the full shape and treats exact zeros as invalid (wrong for chc-masked
+    NaN data), while ``smoothf()`` drops ``2*floor(n/2)`` frames and
+    averages through zero-excluding ``averf``. Centered
+    ``rolling().mean()`` preserves length and coordinates, so plain xarray
+    does the smoothing/averaging here.
+
+    every_s: nominal spacing between drawn profiles, in seconds. On runs
+    shorter than ``every_s * max_curves`` the spacing is refined so up to
+    ``max_curves`` curves still span the run (a literal 60 s spacing on a
+    6.6 s run would yield a single curve).
+
+    Returns ``(fig, (ax_prof, ax_mid), prof)`` with ``prof`` a ``(t, x)``
+    DataArray of the smoothed row-averaged profiles.
+    """
+    import matplotlib.pyplot as plt
+
+    tname = time_coord or ("time_s" if "time_s" in ds.coords else "t")
+    tvals = np.asarray(ds[tname].values, dtype=float)
+    frame_dt = float(np.median(np.diff(tvals))) if tvals.size > 1 else 1.0
+
+    x = np.asarray(ds.x.values, dtype=float)
+    xc0, b, _ = channel_center(x, center=center, half_width=half_width)
+
+    masked = ds[component].where(ds.chc > 0.5)
+    smoothed = masked.rolling(t=int(window), center=True, min_periods=1).mean()
+    prof = smoothed.mean(dim="y", skipna=True).load()
+
+    ubulk = bulk_velocity(prof.mean(dim="t", skipna=True).values, x, b)
+    prof.attrs.update(center=xc0, half_width=b, bulk_velocity=ubulk)
+
+    if normalize:
+        x_plot = (x - xc0) / b
+        xlabel = "x/b [-] (0 = centerline)"
+        yscale = 1.0 / ubulk
+        ylabel_prof = f"{component}/U_bulk [-]"
+        ylabel_mid = "U_bulk(t)/U_bulk [-]"
+    else:
+        x_plot = x - xc0
+        xlabel = "x - center [mm] (0 = centerline)"
+        yscale = 1.0
+        ylabel_prof = f"{component} row-averaged + {int(window)}-frame smoothed [mm/s]"
+        ylabel_mid = "bulk velocity U_bulk(t) [mm/s] (flow-rate proxy)"
+
+    nt = int(ds.sizes["t"])
+    step = max(1, int(round(float(every_s) / frame_dt))) if frame_dt > 0 else 1
+    idx = np.arange(0, nt, step)
+    if len(idx) != int(max_curves) and nt > int(max_curves):
+        idx = np.unique(np.linspace(0, nt - 1, int(max_curves)).round().astype(int))
+
+    fig, (ax_prof, ax_mid) = plt.subplots(2, 1, figsize=figsize)
+    norm = plt.Normalize(vmin=float(tvals.min()), vmax=float(tvals.max()))
+    cmap_o = plt.get_cmap(cmap)
+    for k in idx:
+        kk = int(k)
+        ax_prof.plot(
+            x_plot, prof.isel(t=kk).values * yscale,
+            color=cmap_o(norm(float(tvals[kk]))),
+            linewidth=2.0, label=f"t={float(tvals[kk]):.1f} s",
+        )
+    sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap_o)
+    cbar = fig.colorbar(sm, ax=ax_prof, pad=0.02)
+    cbar.set_label("time [s]")
+    ax_prof.axhline(0, color="k", linewidth=0.8, linestyle="--")
+    ax_prof.set_xlabel(xlabel)
+    ax_prof.set_ylabel(ylabel_prof)
+    ax_prof.set_title(
+        f"Streamwise profile evolution (every ~{float(every_s):g} s, "
+        f"up to {int(max_curves)} curves; center={xc0:.2f} mm, "
+        f"b={b:.2f} mm, U_bulk={ubulk:.0f} mm/s)"
+    )
+    ax_prof.legend(fontsize=8, loc="best")
+
+    bulk_t = np.full(nt, np.nan)
+    for kk in range(nt):
+        try:
+            bulk_t[kk] = bulk_velocity(prof.isel(t=kk).values, x, b)
+        except ValueError:
+            pass
+    ax_mid.plot(tvals, bulk_t * yscale, color="k", linewidth=1.2,
+                label=f"{int(window)}-frame smoothed bulk")
+    ax_mid.scatter(
+        tvals[idx], (bulk_t * yscale)[idx],
+        c=[cmap_o(norm(float(t))) for t in tvals[idx]],
+        s=36, zorder=3,
+    )
+    ax_mid.set_xlabel("time [s]")
+    ax_mid.set_ylabel(ylabel_mid)
+    ax_mid.set_title("Ensemble bulk velocity vs time (markers = drawn profiles)")
+    ax_mid.legend(fontsize=8)
+    fig.tight_layout()
+    return fig, (ax_prof, ax_mid), prof
+
+
+def spatial_tke(ds, components=("u", "v"), window=5):
+    """Per-frame spatial TKE about the row-averaged profile.
+
+    Turbulence here = spatial fluctuations about the instantaneous
+    cross-channel mean profile - not temporal fluctuations about a time
+    mean (which would leak a slowdown trend itself into "turbulence"):
+
+    - mean profile per frame: ``<V>(x,t) = mean over valid rows y``,
+      computed on ``window``-smoothed fields (centered xarray ``rolling``,
+      same as :func:`profile_evolution`);
+    - fluctuations: ``u'(x,y,t) = U - <U>(x,t)`` (same for ``v``);
+    - frame TKE: ``TKE(t) = mean over valid (x,y) of 1/2 (u'^2 + v'^2)``.
+
+    Invalid vectors (``chc``) are masked with NaN throughout, so they
+    contribute to neither the profile nor the average (unlike pivpy's
+    ``reynolds_decomposition``, which is temporal and has no NaN-masked
+    spatial counterpart - hence xarray again).
+
+    Returns an xarray Dataset over ``t`` (plus ``time_s`` when present)
+    with ``tke`` and per-component ``<u'^2>/2``-style variables
+    (``u_var``, ``v_var``), in (velocity units)^2.
+    """
+    import xarray as xr
+
+    window = int(window)
+    smoothed = {
+        c: ds[c].where(ds.chc > 0.5).rolling(t=window, center=True, min_periods=1).mean()
+        for c in components
+    }
+    data = {}
+    tke = None
+    for c in components:
+        prof = smoothed[c].mean(dim="y", skipna=True)
+        fl = smoothed[c] - prof  # broadcast over y
+        var = 0.5 * (fl ** 2).mean(dim=("y", "x"), skipna=True).load()
+        data[f"{c}_var"] = var
+        tke = var if tke is None else tke + var
+
+    coords = {"t": ds.t.values}
+    if "time_s" in ds.coords:
+        coords["time_s"] = ("t", np.asarray(ds.time_s.values, dtype=float))
+    out = xr.Dataset(data_vars={**data, "tke": tke}, coords=coords)
+    out.attrs.update(history=f"spatial_tke(window={window})")
+    return out
+
+
 def run_steady_state_batch(im7_folder, config, out_dir, run_name, N=None):
     """Run the full steady-state PIV batch (parallel process_im7_pair over
     every pair in im7_folder, pivpy Dataset build, reynolds_decomposition,

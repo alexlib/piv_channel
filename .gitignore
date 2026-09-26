@@ -17,3 +17,6 @@ wheels/
 
 # marimo VS Code extension session cache
 __marimo__/
+
+# Local session helpers
+*.hs
