@@ -4,7 +4,8 @@ requires-python = ">=3.14"
 resolution-markers = [
     "sys_platform == 'win32'",
     "sys_platform == 'emscripten'",
-    "sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "sys_platform == 'darwin'",
 ]
 
 [[package]]
@@ -1050,6 +1051,8 @@ dependencies = [
     { name = "numpy" },
 ]
 wheels = [
+    { url = "https://files.pythonhosted.org/packages/30/5a/395c69498cb5ce5bf5dbf1e5aa929368a86ccb4fe738b3b1136cd5a69074/lvpyio-1.5.0-cp314-cp314-macosx_10_15_x86_64.whl", hash = "sha256:9ccf1a8e100e70720d889a71c209d225c8acb3f99c9ab1c70c0d1604a5556727", size = 6576419, upload-time = "2026-09-08T09:36:01.62Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/5e/b7adc73c945a020cbaaa592ab23029a1008803a1d440c5a59a5351dda848/lvpyio-1.5.0-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:445735bf837b652cd5d8e2d4049b48b139653cb765b37a2f568fd40a3c1b5eca", size = 5933994, upload-time = "2026-09-08T09:36:03.757Z" },
     { url = "https://files.pythonhosted.org/packages/46/02/a1b44a30c01692a7da99f9b0f03f9e4e3a434b1d3dfc9c09f0dcd3f6babd/lvpyio-1.5.0-cp314-cp314-manylinux_2_28_x86_64.whl", hash = "sha256:2503bb02212fa691611029da3d11fad5f95647a6d098c050b75e5b8b2f56b8ae", size = 7524483, upload-time = "2026-09-08T09:36:06.233Z" },
     { url = "https://files.pythonhosted.org/packages/d3/c3/219b8aae96130da2a3a7d905b8c5ff6421aea903a01db36b0bdfbce35f85/lvpyio-1.5.0-cp314-cp314-win_amd64.whl", hash = "sha256:9ec7fe5ee7932cbc1b40240fdf66b8ff41769b70d1bb1ea5e76e5d7ca916775a", size = 10127099, upload-time = "2026-09-08T09:36:09.304Z" },
 ]
@@ -1514,7 +1517,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "imagecodecs" },
-    { name = "lvpyio", marker = "sys_platform != 'darwin'" },
+    { name = "lvpyio" },
     { name = "marimo" },
     { name = "matplotlib" },
     { name = "numpy" },
@@ -1539,6 +1542,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "imagecodecs", specifier = ">=2026.8.16" },
+    { name = "lvpyio", specifier = ">=1.5.0" },
     { name = "lvpyio", marker = "sys_platform != 'darwin'", specifier = ">=1.4.0" },
     { name = "marimo", specifier = ">=0.24.0" },
     { name = "matplotlib", specifier = ">=3.8" },

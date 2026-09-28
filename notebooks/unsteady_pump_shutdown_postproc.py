@@ -12,7 +12,7 @@
 
 import marimo
 
-__generated_with = "0.20.4"
+__generated_with = "0.25.0"
 app = marimo.App(width="medium")
 
 
@@ -29,35 +29,35 @@ def _():
     from piv_pipeline import load_vc7_directory
 
     OUT_DIR = Path("outputs")
-    return OUT_DIR, Path, load_vc7_directory, mo, np, plt, xr
+    return OUT_DIR, load_vc7_directory, mo, np, plt, xr
 
 
 @app.cell
 def _(mo):
-    mo.md(
-        """
-        # Unsteady - after pump shutdown - postprocessing
+    mo.md("""
+    # Unsteady - after pump shutdown - postprocessing
 
-        Scope: `baseline_channel/Vmax_after_pump_shutdown`, DaVis-only (100
-        `.vc7` frames). This run's raw acquisition is `.ims` format, which
-        `lvpyio` cannot read (`RuntimeError: .ims isn't an allowed set
-        extension`) - independent openpiv reprocessing is blocked, so
-        DaVis's own vc7 vectors are the only source. `dt` comes from this
-        run's own `Settings_Acquisition_Timing_*.xml` (no raw `.im7` pair
-        frames are exported here to read `DevDataTrace5` from directly,
-        unlike the other DaVis-only runs).
+    Scope: `baseline_channel/Vmax_after_pump_shutdown`, DaVis-only (100
+    `.vc7` frames). This run's raw acquisition is `.ims` format, which
+    `lvpyio` cannot read (`RuntimeError: .ims isn't an allowed set
+    extension`) - independent openpiv reprocessing is blocked, so
+    DaVis's own vc7 vectors are the only source. `dt` comes from this
+    run's own `Settings_Acquisition_Timing_*.xml` (no raw `.im7` pair
+    frames are exported here to read `DevDataTrace5` from directly,
+    unlike the other DaVis-only runs).
 
-        This is a transient (not steady-state) run - Step 2 below looks at
-        the time evolution frame-by-frame rather than time-averaged
-        statistics.
-        """
-    )
+    This is a transient (not steady-state) run - Step 2 below looks at
+    the time evolution frame-by-frame rather than time-averaged
+    statistics.
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    mo.md("## Step 1 - load and store")
+    mo.md("""
+    ## Step 1 - load and store
+    """)
     return
 
 
@@ -88,14 +88,12 @@ def _(OUT_DIR, load_vc7_directory, xr):
 
 @app.cell
 def _(mo):
-    mo.md(
-        """
-        ## Step 2 - transient evolution
+    mo.md("""
+    ## Step 2 - transient evolution
 
-        Mean speed over the field vs. frame index (time), and a
-        frame-by-frame flow-field viewer.
-        """
-    )
+    Mean speed over the field vs. frame index (time), and a
+    frame-by-frame flow-field viewer.
+    """)
     return
 
 

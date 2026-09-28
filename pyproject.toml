@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "imagecodecs>=2026.8.16",
+    "lvpyio>=1.5.0",
     "lvpyio>=1.4.0; sys_platform != 'darwin'",
     "marimo>=0.24.0",
     "matplotlib>=3.8",
@@ -31,3 +32,6 @@ dev = [
     "ruff>=0.16.6",
     "websockets>=16.1.1",
 ]
+
+[tool.marimo.runtime]
+output_max_bytes = 10_000_000
