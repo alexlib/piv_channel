@@ -2014,7 +2014,13 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "numpy" }]
+requires-dist = [
+    { name = "dearpygui", marker = "extra == 'viewer'", specifier = ">=2.0.0" },
+    { name = "marimo", marker = "extra == 'viewer'", specifier = ">=0.10.0" },
+    { name = "numpy" },
+    { name = "pillow", marker = "extra == 'viewer'", specifier = ">=10.0.0" },
+]
+provides-extras = ["viewer"]
 
 [[package]]
 name = "referencing"
