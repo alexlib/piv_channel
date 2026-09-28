@@ -29,7 +29,7 @@ Data Source:
 import marimo
 
 __generated_with = "0.24.0"
-app = marimo.App(width="wide")
+app = marimo.App(width="medium")
 
 
 @app.cell(hide_code=True)
