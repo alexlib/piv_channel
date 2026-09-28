@@ -6,15 +6,19 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "imagecodecs>=2026.8.16",
-    "lvpyio>=1.4.0",
+    "lvpyio>=1.4.0; sys_platform != 'darwin'",
     "marimo>=0.24.0",
+    "matplotlib>=3.8",
+    "numpy>=1.26",
     "pandas>=3.0.5",
     "pivpy>=0.2.0",
+    "readim7>=0.9.1",
     "scikit-image>=0.26.0",
 ]
 
 [tool.uv.sources]
 pivpy = { path = "../pivpy", editable = true }
+readim7 = { path = "../readim7", editable = true }
 
 [dependency-groups]
 dev = [
